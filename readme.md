@@ -9,4 +9,4 @@ This project is a test bed for practicing application architecture and experimen
 - standard REST api
 - prisma + postgres hosted on amazon
 - custom rolled JWT auth with roles for admin/editor/viewer - viewer does not need login
-- investigate deployment to amazon or settle for fly.io - prod and staging environments
+- deployment to fly.io - prod and staging environments
