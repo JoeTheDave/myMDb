@@ -10,3 +10,8 @@ This project is a test bed for practicing application architecture and experimen
 - prisma + postgres hosted on amazon
 - custom rolled JWT auth with roles for admin/editor/viewer - viewer does not need login
 - deployment to fly.io - prod and staging environments
+
+### Helpful Dev Links
+
+- https://nerdcave.com/tailwind-cheat-sheet
+- https://fonts.google.com/
