@@ -9,6 +9,8 @@ LABEL fly_launch_runtime="Node.js"
 # Node.js app lives here
 WORKDIR /app
 
+RUN apt-get update -y && apt-get install -y openssl
+
 # Set production environment
 ENV NODE_ENV="production"
 
@@ -18,11 +20,15 @@ FROM base as build
 
 # Install packages needed to build node modules
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3 openssl
 
 # Install node modules
 COPY --link package-lock.json package.json ./
 RUN npm ci --include=dev
+
+# Generate Prisma Client
+COPY --link src/server/prisma src/server/prisma
+RUN npx prisma generate
 
 # Copy application code
 COPY --link . .

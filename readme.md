@@ -7,9 +7,10 @@ This project is a test bed for practicing application architecture and experimen
 - vite-express
 - tailwindcss + https://ui.shadcn.com/
 - standard REST api
-- prisma + postgres hosted on amazon
-- custom rolled JWT auth with roles for admin/editor/viewer - viewer does not need login
-- deployment to fly.io - prod and staging environments
+- prisma + postgres hosted on tembo.io
+- images hosted on amazon S3
+- custom rolled JWT auth
+- deployment to fly.io
 
 ### Helpful Dev Links
 
