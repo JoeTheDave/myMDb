@@ -16,3 +16,7 @@ This project is a test bed for practicing application architecture and experimen
 
 - https://nerdcave.com/tailwind-cheat-sheet
 - https://fonts.google.com/
+
+### Shadcn - add component
+
+- `npx shadcn-ui@latest add <component>`
