@@ -1,14 +1,20 @@
-import { Button } from '@/client/components/ui/button'
+import { Layout } from '@/client/components/Layout'
+import { Routes, Route, BrowserRouter } from 'react-router-dom'
+import { Login } from '@/client/components/Login'
+import { Register } from '@/client/components/Register'
+import { NotFound } from '@/client/components/NotFound'
 
-function App() {
+export const App = () => {
   return (
-    <div id="app">
-      <div className="flex justify-center items-center h-20 mx-10 rounded-md bg-gray-200 relative top-10">
-        <div className="text-gray-400 text-[20px] font-Roboto">myMDb</div>
-      </div>
-      <Button>Click me</Button>
-    </div>
+    <BrowserRouter>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<div>Content</div>} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
   )
 }
-
-export default App

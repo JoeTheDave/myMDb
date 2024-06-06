@@ -5,7 +5,7 @@ This project is a test bed for practicing application architecture and experimen
 ### Stack
 
 - vite-express
-- tailwindcss + https://ui.shadcn.com/
+- tailwindcss + DaisyUI
 - standard REST api
 - prisma + postgres hosted on tembo.io
 - images hosted on amazon S3
@@ -16,7 +16,3 @@ This project is a test bed for practicing application architecture and experimen
 
 - https://nerdcave.com/tailwind-cheat-sheet
 - https://fonts.google.com/
-
-### Shadcn - add component
-
-- `npx shadcn-ui@latest add <component>`
