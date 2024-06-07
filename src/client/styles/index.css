@@ -19,3 +19,8 @@ body,
   outline-offset: 0px;
   outline-width: 1.2px;
 }
+
+.input:disabled,
+.input[disabled] {
+  cursor: default;
+}
