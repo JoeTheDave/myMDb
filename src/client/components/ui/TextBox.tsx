@@ -3,33 +3,43 @@ import { ReactComponentProps } from '@/client/lib/types'
 import clsx from 'clsx'
 
 export interface TextBoxProps extends ReactComponentProps {
-  id: string
-  label: string
-  labelTopRight?: string
-  labelBottomRight?: string
-  error?: string
-  size?: 'xs' | 'sm' | 'md' | 'lg'
-  disabled?: boolean
+  autoFocus?: boolean
   color?: 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'info' | 'accent' | 'default'
-  password?: boolean
-  watermark?: string
+  disabled?: boolean
+  error?: string
   iconPrefix?: JSX.Element | JSX.Element[]
   iconSuffix?: JSX.Element | JSX.Element[]
+  id: string
+  label: string
+  labelBottomRight?: string
+  labelTopRight?: string
+  name: string
+  onBlur?: () => void
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
+  password?: boolean
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  value?: string
+  watermark?: string
 }
 
 export const TextBox: FC<TextBoxProps> = ({
-  id,
-  label,
-  labelTopRight,
-  labelBottomRight,
-  error,
-  size = 'md',
-  disabled,
+  autoFocus,
   color = 'default',
-  password,
-  watermark,
+  disabled,
+  error,
   iconPrefix,
   iconSuffix,
+  id,
+  label,
+  labelBottomRight,
+  labelTopRight,
+  name,
+  onBlur,
+  onChange,
+  password,
+  size = 'md',
+  value,
+  watermark,
 }) => {
   return (
     <label className="form-control w-full py-1">
@@ -55,12 +65,16 @@ export const TextBox: FC<TextBoxProps> = ({
       >
         {iconPrefix}
         <input
-          id={id}
-          name={id}
-          type={password ? 'password' : 'text'}
-          placeholder={watermark}
+          autoFocus={autoFocus}
           className="grow"
           disabled={disabled}
+          id={id}
+          name={name}
+          onBlur={onBlur}
+          onChange={onChange}
+          placeholder={watermark}
+          type={password ? 'password' : 'text'}
+          value={value}
         />
         {iconSuffix}
       </label>

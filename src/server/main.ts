@@ -1,31 +1,17 @@
 import express from 'express'
 import ViteExpress from 'vite-express'
+import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
-
-import dataService from './prisma/dataService.ts'
+import apiRoutes from './lib/apiRoutes.ts'
 
 dotenv.config()
 
 const port = parseInt(process.env.PORT || '')
 const app = express()
+app.use(express.json())
+app.use(cookieParser())
 
-app.get('/node-environment', (req, res) => {
-  res.send(`Node.js environment: ${process.env.NODE_ENV}, ${process.env.NODE_ENV === 'development'}`)
-})
-
-app.get('/create', async (req, res) => {
-  const user = await dataService.createAppUser('joethedave@gmail.com', 'asdf')
-  res.send(`User created: ${user.email}`)
-})
-
-app.get('/retreive', async (req, res) => {
-  const user = await dataService.getAppUserByEmail('joethedave@gmail.com')
-  if (user) {
-    res.send(`Found user: ${user.email}`)
-  } else {
-    res.send(`User not found`)
-  }
-})
+apiRoutes(app)
 
 ViteExpress.listen(app, port, () => {
   const url = `http://localhost:${port}`

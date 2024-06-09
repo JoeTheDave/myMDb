@@ -1,9 +1,37 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { AuthContainer } from '@/client/components/AuthContainer'
 import { TextBox } from '@/client/components/ui/TextBox'
 import { Button } from '@/client/components/ui/Button'
+import api from '@/client/lib/api'
 
 export const Login = () => {
+  const navigate = useNavigate()
+  const [form, setForm] = useState<{
+    email: string
+    password: string
+  }>({
+    email: '',
+    password: '',
+  })
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    })
+  }
+
+  const submitAction = async () => {
+    const result = await api.login(form.email, form.password)
+    if (result.success) {
+      navigate('/')
+    } else {
+      toast.error(result.message || 'Unknown Error')
+    }
+  }
+
   return (
     <AuthContainer
       header="Login"
@@ -16,18 +44,22 @@ export const Login = () => {
             </Link>
           </div>
           <div className="flex gap-2">
-            <Button id="register-submit" size="md">
-              Cancel
-            </Button>
-            <Button id="register-submit" color="secondary" size="md">
+            <Button id="register-submit" color="secondary" size="md" onClick={submitAction}>
               Login
             </Button>
           </div>
         </div>
       }
     >
-      <TextBox id="register-email" label="Email" />
-      <TextBox id="register-password" password label="Password" />
+      <TextBox id="register-email" name="email" label="Email" value={form.email} onChange={onChange} autoFocus />
+      <TextBox
+        id="register-password"
+        name="password"
+        password
+        label="Password"
+        value={form.password}
+        onChange={onChange}
+      />
     </AuthContainer>
   )
 }
