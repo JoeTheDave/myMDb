@@ -19,3 +19,10 @@ export const validatePassword = (password: string) => {
   }
   return ''
 }
+
+export const appConstants = {
+  cookies: {
+    authorization: 'authorization',
+    appUserIdentity: 'app-user-identity',
+  },
+}

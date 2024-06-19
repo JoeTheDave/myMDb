@@ -23,5 +23,5 @@ This project is a test bed for practicing application architecture and experimen
 - [ ] Server side establish an API for returning `success`, `message`, and `data`.
 - [ ] Build out strong types for client side api function return types.
 - [ ] Login and Register pages - should submit on hitting enter.
-- [ ] Detect logged in user on client side - an alternate cookie perhaps?
+- [x] Detect logged in user on client side - an alternate cookie perhaps?
 - [ ] Change menu if logged in and auto nav away from login/register when logged in.

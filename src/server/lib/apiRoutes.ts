@@ -5,9 +5,10 @@ import {
   getAccountIdFromRequest,
   signAccessToken,
   validateAccountPassword,
-} from './authorization.ts'
-import dataService from '../prisma/dataService.ts'
-import { validateEmail, validatePassword } from './util.ts'
+} from '@/server/lib/authorization.ts'
+import dataService from '@/server/prisma/dataService.ts'
+import { validateEmail, validatePassword, appConstants } from '@/server/lib/util.ts'
+import { AppUserIdentity } from '@/server/lib/types.ts'
 
 const apiRoutes = (app: Express) => {
   app.post('/api/create-account', async (req, res) => {
@@ -52,13 +53,18 @@ const apiRoutes = (app: Express) => {
         throw new Error('Invalid Credentials')
       }
       const accessToken = await signAccessToken(appUser.id)
-      res.cookie('authorization', accessToken, {
+      res.cookie(appConstants.cookies.authorization, accessToken, {
         httpOnly: true,
         // TODO: Make this cookie more secure and implement refresh tokens
         // secure: true,
         // maxAge: 1000000,
         // signed: true,
       })
+      res.cookie(appConstants.cookies.appUserIdentity, {
+        user: appUser.email,
+        role: appUser.role,
+        loggedIn: true,
+      } as AppUserIdentity)
       return res.status(200).send({ success: true, message: '' })
     } catch (e) {
       console.log((e as Error).message)
@@ -66,16 +72,18 @@ const apiRoutes = (app: Express) => {
     }
   })
 
-  app.get('/api/is-logged-in', authorizeRequest, (req, res) => {
-    const accountId = getAccountIdFromRequest(req)
-    if (!accountId) {
-      return res.status(200).send({ authorized: false })
-    }
-    return res.status(200).send({ authorized: true })
-  })
+  // app.get('/api/is-logged-in', authorizeRequest, (req, res) => {
+  //   const accountId = getAccountIdFromRequest(req)
+  //   if (!accountId) {
+  //     return res.status(200).send({ authorized: false })
+  //   }
+  //   return res.status(200).send({ authorized: true })
+  // })
 
   app.post('/api/logout', (req, res) => {
-    res.clearCookie('authorization')
+    console.log('logout')
+    res.clearCookie(appConstants.cookies.authorization)
+    res.clearCookie(appConstants.cookies.appUserIdentity)
     return res.status(200).send({ success: true })
   })
 

@@ -5,13 +5,14 @@ import { Layout } from '@/client/components/Layout'
 import { Login } from '@/client/components/Login'
 import { Register } from '@/client/components/Register'
 import { NotFound } from '@/client/components/NotFound'
+import { Movies } from '@/client/components/Movies'
 
 export const App = () => {
   return (
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<div>Content</div>} />
+          <Route path="/" element={<Movies />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="*" element={<NotFound />} />

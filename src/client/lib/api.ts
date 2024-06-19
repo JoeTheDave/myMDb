@@ -22,7 +22,17 @@ const post = async (url: string, body: object) => {
     },
     body: JSON.stringify(body),
   })
+  /////
+
+  const setCookieHeader = response.headers.get('Set-Cookie')
+  if (setCookieHeader) {
+    console.log('Set-Cookie header exists:', setCookieHeader)
+  } else {
+    console.log('Set-Cookie header does not exist.')
+  }
+  /////
   if (response.status === 200) {
+    console.log(response.headers)
     const data = await response.json()
     return data
   } else {
@@ -43,13 +53,10 @@ const login = async (email: string, password: string) =>
     password,
   })
 
-const isLoggedIn = async () => await get('/api/is-logged-in')
-
 const logout = async () => await post('/api/logout', {})
 
 const api = {
   createAccount,
-  isLoggedIn,
   login,
   logout,
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { AuthContainer } from '@/client/components/AuthContainer'
 import { TextBox } from '@/client/components/ui/TextBox'
@@ -7,7 +7,6 @@ import { Button } from '@/client/components/ui/Button'
 import api from '@/client/lib/api'
 
 export const Login = () => {
-  const navigate = useNavigate()
   const [form, setForm] = useState<{
     email: string
     password: string
@@ -26,7 +25,7 @@ export const Login = () => {
   const submitAction = async () => {
     const result = await api.login(form.email, form.password)
     if (result.success) {
-      navigate('/')
+      window.location.href = '/'
     } else {
       toast.error(result.message || 'Unknown Error')
     }
