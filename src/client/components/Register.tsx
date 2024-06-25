@@ -81,12 +81,13 @@ export const Register = () => {
             </Link>
           </div>
           <div className="flex gap-2">
-            <Button id="register-submit" color="secondary" size="md" onClick={submitAction}>
+            <Button id="register-submit" submit color="secondary" size="md">
               Create Account
             </Button>
           </div>
         </div>
       }
+      submitAction={submitAction}
     >
       <TextBox
         id="register-email"

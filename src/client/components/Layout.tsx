@@ -1,12 +1,14 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { FC } from 'react'
-import { Menu, LogIn, UserPlus2 } from 'lucide-react'
-
+import { Menu, LogIn, UserPlus2, LogOut } from 'lucide-react'
+import { useAppUser } from '@/client/lib/authorizationHooks'
 import { ReactComponentProps } from '@/client/lib/types'
+import api from '@/client/lib/api'
 
 export interface LayoutProps extends ReactComponentProps {}
 
 export const Layout: FC<LayoutProps> = ({ children }) => {
+  const appUser = useAppUser()
   return (
     <div id="layout" className="flex flex-col h-full">
       <header
@@ -27,18 +29,37 @@ export const Layout: FC<LayoutProps> = ({ children }) => {
             tabIndex={0}
             className="dropdown-content z-[1] menu shadow bg-base-100 w-52 border-t-gray-950 border-t-4 p-0 [&_li>*]:rounded-none [&_li>*]:text-gray-900"
           >
-            <li>
-              <Link to="/login">
-                <LogIn size={20} className="text-gray-700" />
-                Login
-              </Link>
-            </li>
-            <li>
-              <Link to="/register">
-                <UserPlus2 size={20} className="text-gray-700" />
-                Create Account
-              </Link>
-            </li>
+            {appUser.loggedIn && (
+              <>
+                <li>
+                  <a
+                    onClick={() => {
+                      api.logout()
+                      window.location.href = '/'
+                    }}
+                  >
+                    <LogOut size={20} className="text-gray-700" />
+                    Logout
+                  </a>
+                </li>
+              </>
+            )}
+            {!appUser.loggedIn && (
+              <>
+                <li>
+                  <Link to="/login">
+                    <LogIn size={20} className="text-gray-700" />
+                    Login
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/register">
+                    <UserPlus2 size={20} className="text-gray-700" />
+                    Create Account
+                  </Link>
+                </li>
+              </>
+            )}
           </ul>
         </div>
       </header>

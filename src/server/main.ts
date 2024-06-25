@@ -3,6 +3,7 @@ import ViteExpress from 'vite-express'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
 import apiRoutes from './lib/apiRoutes.ts'
+import { setGenericUserCookie } from '@/server/lib/authorization.ts'
 
 dotenv.config()
 
@@ -10,6 +11,7 @@ const port = parseInt(process.env.PORT || '')
 const app = express()
 app.use(express.json())
 app.use(cookieParser())
+app.use(setGenericUserCookie)
 
 apiRoutes(app)
 

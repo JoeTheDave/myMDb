@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
 import bcrypt from 'bcrypt'
 import jwt, { JwtPayload } from 'jsonwebtoken'
+import { v4 as uuid } from 'uuid'
+import { appConstants } from '@/server/lib/util.ts'
+import { AppUserIdentity } from '@/server/lib/types.ts'
 
 interface AuthorizationPayload extends JwtPayload {
   accountId: string
@@ -28,6 +31,17 @@ export const validateAccountPassword = async (password: string, passwordHash: st
   await bcrypt.compare(password, passwordHash)
 
 export const signAccessToken = async (accountId: string) => await jwt.sign({ accountId }, getAccessTokenSecretKey())
+
+export const setGenericUserCookie = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.cookies[appConstants.cookies.appUserIdentity]) {
+    res.cookie(appConstants.cookies.appUserIdentity, {
+      user: uuid(),
+      role: 'viewer',
+      loggedIn: false,
+    } as AppUserIdentity)
+  }
+  next()
+}
 
 export const authorizeRequest = (req: Request, res: Response, next: NextFunction) => {
   const accessToken = req.cookies['authorization']

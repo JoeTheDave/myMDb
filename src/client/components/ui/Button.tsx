@@ -9,6 +9,7 @@ export interface ButtonProps extends ReactComponentProps {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   outline?: boolean
   disabled?: boolean
+  submit?: boolean
 }
 
 export const Button: FC<ButtonProps> = ({
@@ -19,12 +20,13 @@ export const Button: FC<ButtonProps> = ({
   outline,
   size = 'md',
   disabled,
+  submit,
 }) => {
   return (
     <button
       id={id}
       name={id}
-      type="button"
+      type={submit ? 'submit' : 'button'}
       onClick={onClick}
       disabled={disabled}
       className={clsx('btn', 'btn-', {

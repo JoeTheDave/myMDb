@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { AuthContainer } from '@/client/components/AuthContainer'
 import { TextBox } from '@/client/components/ui/TextBox'
@@ -7,7 +7,6 @@ import { Button } from '@/client/components/ui/Button'
 import api from '@/client/lib/api'
 
 export const Login = () => {
-  const navigate = useNavigate()
   const [form, setForm] = useState<{
     email: string
     password: string
@@ -26,7 +25,7 @@ export const Login = () => {
   const submitAction = async () => {
     const result = await api.login(form.email, form.password)
     if (result.success) {
-      navigate('/')
+      window.location.href = '/'
     } else {
       toast.error(result.message || 'Unknown Error')
     }
@@ -44,12 +43,13 @@ export const Login = () => {
             </Link>
           </div>
           <div className="flex gap-2">
-            <Button id="register-submit" color="secondary" size="md" onClick={submitAction}>
+            <Button id="register-submit" submit color="secondary" size="md">
               Login
             </Button>
           </div>
         </div>
       }
+      submitAction={submitAction}
     >
       <TextBox id="register-email" name="email" label="Email" value={form.email} onChange={onChange} autoFocus />
       <TextBox

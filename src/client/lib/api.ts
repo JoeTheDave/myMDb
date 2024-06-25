@@ -43,13 +43,10 @@ const login = async (email: string, password: string) =>
     password,
   })
 
-const isLoggedIn = async () => await get('/api/is-logged-in')
-
 const logout = async () => await post('/api/logout', {})
 
 const api = {
   createAccount,
-  isLoggedIn,
   login,
   logout,
 }
