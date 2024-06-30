@@ -7,8 +7,10 @@ import {
   validateAccountPassword,
 } from '@/server/lib/authorization.ts'
 import dataService from '@/server/prisma/dataService.ts'
-import { validateEmail, validatePassword, appConstants } from '@/server/lib/util.ts'
+import { validateEmail, validatePassword, appConstants } from '@/shared/utils.ts'
+import imageProcessingService from '@/server/lib/imageProcessingService.ts'
 import { AppUserIdentity } from '@/server/lib/types.ts'
+import { Movie } from '@/shared/types.ts'
 
 const apiRoutes = (app: Express) => {
   app.post('/api/create-account', async (req, res) => {
@@ -89,6 +91,23 @@ const apiRoutes = (app: Express) => {
   // app.get('/node-environment', (req, res) => {
   //   res.send(`Node.js environment: ${process.env.NODE_ENV}, ${process.env.NODE_ENV === 'development'}`)
   // })
+
+  app.post('/api/pre-process-img', async (req, res) => {
+    const { file } = req.body as {
+      file: string
+    }
+    const processedFile = await imageProcessingService.processImageLg(file)
+    return res.status(200).send({ success: true, data: { processedFile } })
+  })
+
+  app.post('/api/save-movie', async (req, res) => {
+    const movie = req.body as Movie
+    console.log(movie)
+
+    imageProcessingService.uploadImage(movie.movieImage)
+
+    return res.status(200).send({ success: true, data: {} })
+  })
 }
 
 export default apiRoutes

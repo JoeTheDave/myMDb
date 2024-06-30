@@ -4,7 +4,7 @@ import { toast } from 'react-toastify'
 import { AuthContainer } from '@/client/components/AuthContainer'
 import { TextBox } from '@/client/components/ui/TextBox'
 import { Button } from '@/client/components/ui/Button'
-import { validateEmail, validatePassword } from '@/server/lib/util'
+import { validateEmail, validatePassword } from '@/shared/utils'
 import api from '@/client/lib/api'
 
 export const Register = () => {

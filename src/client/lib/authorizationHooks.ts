@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { appConstants } from '@/server/lib/util'
+import { appConstants } from '@/shared/utils'
 import { AppUserIdentity } from '@/server/lib/types'
 
 export const useAppUser = () => {

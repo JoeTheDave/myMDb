@@ -6,6 +6,7 @@ import { Login } from '@/client/components/Login'
 import { Register } from '@/client/components/Register'
 import { NotFound } from '@/client/components/NotFound'
 import { Movies } from '@/client/components/Movies'
+import { MovieEdit } from '@/client/components/MovieEdit'
 
 export const App = () => {
   return (
@@ -13,6 +14,8 @@ export const App = () => {
       <Layout>
         <Routes>
           <Route path="/" element={<Movies />} />
+          <Route path="/movies" element={<Movies />} />
+          <Route path="/movies/add" element={<MovieEdit />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="*" element={<NotFound />} />

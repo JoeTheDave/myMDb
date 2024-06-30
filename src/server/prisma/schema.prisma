@@ -27,7 +27,7 @@ model Actor {
   id String @id @default(uuid()) 
   name String @unique
   birthdate DateTime?
-  // actor image?
+  actorImage String?
   createdAt DateTime @default(now()) 
   updatedAt DateTime @updatedAt 
   movies MovieActor[]
@@ -37,7 +37,8 @@ model Movie {
   id String @id @default(uuid()) 
   name String @unique
   releaseDate DateTime?
-  // movie image
+  movieImage String?
+  mpaRating String?
   createdAt DateTime @default(now()) 
   updatedAt DateTime @updatedAt
   actors MovieActor[]
@@ -52,7 +53,7 @@ model MovieActor {
   actorId String
   characterName String?
   castOrder Int?
-  // character image?
+  characterImage String?
   createdAt DateTime @default(now()) 
   updatedAt DateTime @updatedAt
 }
