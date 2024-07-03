@@ -17,6 +17,10 @@ This project is a test bed for practicing application architecture and experimen
 - https://nerdcave.com/tailwind-cheat-sheet
 - https://fonts.google.com/
 
+### Quick Ref
+
+npx prisma migrate dev --name migration-name
+
 ### TODO
 
 - [ ] Login and Register pages - debounce submit button.

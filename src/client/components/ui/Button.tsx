@@ -29,7 +29,7 @@ export const Button: FC<ButtonProps> = ({
       type={submit ? 'submit' : 'button'}
       onClick={onClick}
       disabled={disabled}
-      className={clsx('btn', 'btn-', {
+      className={clsx('btn', {
         'btn-primary': color === 'primary',
         'btn-secondary': color === 'secondary',
         'btn-success': color === 'success',

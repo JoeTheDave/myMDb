@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import bcrypt from 'bcrypt'
 import jwt, { JwtPayload } from 'jsonwebtoken'
 import { v4 as uuid } from 'uuid'
-import { appConstants } from '@/server/lib/util.ts'
+import { appConstants } from '@/shared/utils.ts'
 import { AppUserIdentity } from '@/server/lib/types.ts'
 
 interface AuthorizationPayload extends JwtPayload {

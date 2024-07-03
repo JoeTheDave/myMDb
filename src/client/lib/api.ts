@@ -1,3 +1,5 @@
+import { Movie } from '@/shared/types'
+
 const get = async (url: string) => {
   const response = await fetch(url, {
     method: 'GET',
@@ -45,10 +47,16 @@ const login = async (email: string, password: string) =>
 
 const logout = async () => await post('/api/logout', {})
 
+const preProcessImage = async (file: string) => await post('/api/pre-process-img', { file })
+
+const saveMovie = async (movie: Movie) => await post('/api/save-movie', movie)
+
 const api = {
   createAccount,
   login,
   logout,
+  preProcessImage,
+  saveMovie,
 }
 
 export default api
