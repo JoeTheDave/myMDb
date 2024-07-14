@@ -10,6 +10,7 @@ import dataService from '@/server/prisma/dataService.ts'
 import { validateEmail, validatePassword, appConstants } from '@/shared/utils.ts'
 import imageProcessingService from '@/server/lib/imageProcessingService.ts'
 import { AppUserIdentity } from '@/server/lib/types.ts'
+import { createResponse } from '@/server/lib/util.ts'
 import { Movie } from '@/shared/types.ts'
 
 const apiRoutes = (app: Express) => {
@@ -107,8 +108,8 @@ const apiRoutes = (app: Express) => {
     const thumbnailKey = await imageProcessingService.uploadImage(smallImage)
     movie.movieImage = imageKey
     movie.movieThumbnail = thumbnailKey
-    const newMovie = await dataService.saveMovie(movie)
-    return res.status(200).send({ success: true, data: { movieId: newMovie.id } })
+    const savedMovie = await dataService.saveMovie(movie)
+    return res.status(200).send(createResponse<Movie>({ data: savedMovie }))
   })
 }
 
