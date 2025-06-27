@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://cloudconvert.com/
+HostUrl=https://us-east.storage.cloudconvert.com/tasks/1012537f-726a-4e4c-8384-9aabce889460/saundra_bullock.gif?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cloudconvert-production%2F20240626%2Fva%2Fs3%2Faws4_request&X-Amz-Date=20240626T234015Z&X-Amz-Expires=86400&X-Amz-Signature=05c99d97c9c17a03b9103b5435d21b3a785fe42dca727cd1d1a56e3e6e8e3afb&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22saundra_bullock.gif%22&response-content-type=image%2Fgif&x-id=GetObject
