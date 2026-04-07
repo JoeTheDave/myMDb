@@ -21,4 +21,4 @@ primary_region = "dfw"
   cpus = 1
 
 [deploy]
-  release_command = "npm run db:migrate:deploy"
+  release_command = "sh -c 'cd /app/server && npx prisma migrate deploy --schema src/prisma/schema.prisma'"
