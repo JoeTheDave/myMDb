@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  imageUrl  String?
+  role      Role     @default(VIEWER)
+  active    Boolean  @default(true)
+  ratings   Rating[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Media {
+  id            String         @id @default(uuid())
+  title         String
+  imageUrl      String?
+  releaseDate   DateTime?
+  mediaType     MediaType      @default(MOVIE)
+  contentRating ContentRating?
+  synopsis      String?
+  castRoles     CastRole[]
+  ratings       Rating[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+enum MediaType {
+  MOVIE
+  SHOW
+}
+
+enum ContentRating {
+  G
+  PG
+  PG_13
+  R
+  NC_17
+  NR
+  TV_Y
+  TV_Y7
+  TV_G
+  TV_PG
+  TV_14
+  TV_MA
+}
+
+model Actor {
+  id        String     @id @default(uuid())
+  name      String
+  imageUrl  String?
+  birthday  DateTime?
+  deathDay  DateTime?
+  castRoles CastRole[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CastRole {
+  id            String   @id @default(uuid())
+  characterName String
+  roleImageUrl  String?
+  actorId       String
+  mediaId       String
+  actor         Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  media         Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([actorId, mediaId])
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  stars     Int
+  userId    String
+  mediaId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, mediaId])
+}
