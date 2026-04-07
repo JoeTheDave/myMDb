@@ -1,0 +1,24 @@
+app = "mymdb"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "3001"
+  NODE_ENV = "production"
+  FRONTEND_URL = "https://mymdb.fly.dev"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[deploy]
+  release_command = "npm run db:migrate:deploy"

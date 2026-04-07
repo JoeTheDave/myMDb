@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: localdev123
+          POSTGRES_DB: mymdb_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server deps
+        run: npm ci
+        working-directory: server
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:localdev123@localhost:5432/mymdb_test
+
+      - name: Run migrations
+        run: npm run db:migrate:deploy
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:localdev123@localhost:5432/mymdb_test
+
+      - name: Typecheck server
+        run: npx tsc --noEmit
+        working-directory: server
+
+      - name: Run integration tests
+        run: npm test
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:localdev123@localhost:5432/mymdb_test
+          NODE_ENV: test
+          JWT_SECRET: test-secret-at-least-32-characters-long
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: us-east-1
+          AWS_BUCKET_NAME: mymdb-test-assets
+
+      - name: Install client deps
+        run: npm ci
+        working-directory: client
+
+      - name: Typecheck client
+        run: npx tsc --noEmit
+        working-directory: client
+
+      - name: Lint client
+        run: npm run lint
+        working-directory: client
