@@ -1,5 +1,5 @@
 app = "mymdb"
-primary_region = "iad"
+primary_region = "dfw"
 
 [build]
 

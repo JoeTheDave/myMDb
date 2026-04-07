@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONTAINER_NAME="raise-the-bones-postgres"
+CONTAINER_NAME="sage-shared-dev-postgres"
 
 # Check if container exists
 if docker inspect "$CONTAINER_NAME" &>/dev/null; then
@@ -20,6 +20,7 @@ else
     --name "$CONTAINER_NAME" \
     -e POSTGRES_PASSWORD=localdev123 \
     -p 5432:5432 \
+    -v sage-shared-dev-postgres-data:/var/lib/postgresql/data \
     --restart unless-stopped \
     postgres:15
   echo "✓ $CONTAINER_NAME created and started"

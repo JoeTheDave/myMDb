@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONTAINER_NAME="raise-the-bones-postgres"
-DB_NAME="mymdb"
+CONTAINER_NAME="sage-shared-dev-postgres"
+DB_NAME="mymdb_dev"
 
 echo "→ Checking if database '$DB_NAME' exists in $CONTAINER_NAME..."
 
