@@ -67,7 +67,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 })
 
 // PATCH /api/users/:id
-router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id', async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const parsed = updateUserSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -84,9 +84,12 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
     return
   }
   try {
+    const updateData: { role?: 'ADMIN' | 'EDITOR' | 'VIEWER'; active?: boolean } = {}
+    if (parsed.data.role !== undefined) updateData.role = parsed.data.role
+    if (parsed.data.active !== undefined) updateData.active = parsed.data.active
     const user = await prisma.user.update({
       where: { id },
-      data: parsed.data,
+      data: updateData,
       select: { id: true, email: true, name: true, imageUrl: true, role: true, active: true, createdAt: true },
     })
     logger.info({ logId: 'swift-marking-ridge', userId: user.id }, 'User updated')
@@ -102,7 +105,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 })
 
 // DELETE /api/users/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })

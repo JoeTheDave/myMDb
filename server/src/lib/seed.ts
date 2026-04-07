@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { logger } from './logger'
 
 const prisma = new PrismaClient()
 
@@ -19,11 +20,11 @@ export async function seedAdminUser() {
 if (require.main === module) {
   seedAdminUser()
     .then(() => {
-      console.log('Admin user seeded')
+      logger.info({ logId: 'fresh-rising-bloom' }, 'Admin user seeded')
       process.exit(0)
     })
-    .catch(err => {
-      console.error(err)
+    .catch((err: unknown) => {
+      logger.error({ logId: 'rough-seeding-fault', err }, 'Failed to seed admin user')
       process.exit(1)
     })
 }

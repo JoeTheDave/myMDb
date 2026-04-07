@@ -101,7 +101,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
 })
 
 // GET /api/actors/:id
-router.get('/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })
@@ -182,7 +182,7 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Re
 })
 
 // PUT /api/actors/:id
-router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })
@@ -244,7 +244,7 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request, res: 
 })
 
 // DELETE /api/actors/:id
-router.delete('/:id', authenticate, authorize('ADMIN'), async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', authenticate, authorize('ADMIN'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })

@@ -12,7 +12,7 @@ const upsertRatingSchema = z.object({
 })
 
 // PUT /api/media/:id/ratings
-router.put('/', authenticate, authorize('VIEWER'), async (req: Request, res: Response): Promise<void> => {
+router.put('/', authenticate, authorize('VIEWER'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const mediaId = req.params['id']
   if (!mediaId) {
     res.status(400).json({ error: 'Missing media id' })
@@ -46,7 +46,7 @@ router.put('/', authenticate, authorize('VIEWER'), async (req: Request, res: Res
 })
 
 // DELETE /api/media/:id/ratings
-router.delete('/', authenticate, authorize('VIEWER'), async (req: Request, res: Response): Promise<void> => {
+router.delete('/', authenticate, authorize('VIEWER'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const mediaId = req.params['id']
   if (!mediaId) {
     res.status(400).json({ error: 'Missing media id' })

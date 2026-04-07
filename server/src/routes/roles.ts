@@ -24,7 +24,7 @@ function isS3Url(url: string | null | undefined): boolean {
 }
 
 // POST /api/media/:id/roles
-router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const mediaId = req.params['id']
   if (!mediaId) {
     res.status(400).json({ error: 'Missing media id' })
@@ -80,7 +80,7 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Re
 // PUT /api/roles/:id — handled by the standalone router in index.ts
 export const rolesRouter = Router()
 
-rolesRouter.put('/:id', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
+rolesRouter.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })
@@ -135,7 +135,7 @@ rolesRouter.put('/:id', authenticate, authorize('EDITOR'), async (req: Request, 
   }
 })
 
-rolesRouter.delete('/:id', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
+rolesRouter.delete('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
   if (!id) {
     res.status(400).json({ error: 'Missing id' })
