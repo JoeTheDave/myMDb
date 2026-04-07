@@ -20,6 +20,7 @@ RUN cd client && npm run build
 
 # Production stage — only what's needed to run
 FROM node:24-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 COPY --from=builder /app/server/dist ./server/dist
