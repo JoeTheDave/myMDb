@@ -147,7 +147,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       imageUrl: actor.imageUrl,
       birthday: actor.birthday,
       deathDay: actor.deathDay,
-      filmography: actor.castRoles.map(role => ({
+      filmography: actor.castRoles.map((role: { id: string; characterName: string; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseDate: Date | null } }) => ({
         id: role.media.id,
         title: role.media.title,
         imageUrl: role.media.imageUrl,
