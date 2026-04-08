@@ -17,8 +17,8 @@ describe('GET /api/actors', () => {
 
     const res = await request(app).get('/api/actors').set('Cookie', `token=${token}`)
     expect(res.status).toBe(200)
-    expect(Array.isArray(res.body.data)).toBe(true)
-    expect(res.body.data.length).toBe(2)
+    expect(Array.isArray(res.body.items)).toBe(true)
+    expect(res.body.items.length).toBe(2)
     expect(res.body.total).toBe(2)
   })
 
@@ -30,8 +30,8 @@ describe('GET /api/actors', () => {
 
     const res = await request(app).get('/api/actors?q=tom').set('Cookie', `token=${token}`)
     expect(res.status).toBe(200)
-    expect(res.body.data.length).toBe(1)
-    expect(res.body.data[0].name).toBe('Tom Hanks')
+    expect(res.body.items.length).toBe(1)
+    expect(res.body.items[0].name).toBe('Tom Hanks')
   })
 })
 
@@ -59,7 +59,7 @@ describe('GET /api/actors/:id', () => {
     expect(res.status).toBe(200)
     expect(res.body.id).toBe(actor.id)
     expect(res.body.name).toBe('Cate Blanchett')
-    expect(Array.isArray(res.body.castRoles)).toBe(true)
+    expect(Array.isArray(res.body.filmography)).toBe(true)
   })
 })
 

@@ -17,8 +17,8 @@ describe('GET /api/media', () => {
 
     const res = await request(app).get('/api/media').set('Cookie', `token=${token}`)
     expect(res.status).toBe(200)
-    expect(Array.isArray(res.body.data)).toBe(true)
-    expect(res.body.data.length).toBe(2)
+    expect(Array.isArray(res.body.items)).toBe(true)
+    expect(res.body.items.length).toBe(2)
     expect(res.body.total).toBe(2)
     expect(res.body.page).toBe(1)
   })
@@ -31,8 +31,8 @@ describe('GET /api/media', () => {
 
     const res = await request(app).get('/api/media?type=SHOW').set('Cookie', `token=${token}`)
     expect(res.status).toBe(200)
-    expect(res.body.data.length).toBe(1)
-    expect(res.body.data[0].mediaType).toBe('SHOW')
+    expect(res.body.items.length).toBe(1)
+    expect(res.body.items[0].mediaType).toBe('SHOW')
   })
 
   it('filters by title search query', async () => {
@@ -43,8 +43,8 @@ describe('GET /api/media', () => {
 
     const res = await request(app).get('/api/media?q=inception').set('Cookie', `token=${token}`)
     expect(res.status).toBe(200)
-    expect(res.body.data.length).toBe(1)
-    expect(res.body.data[0].title).toBe('Inception')
+    expect(res.body.items.length).toBe(1)
+    expect(res.body.items[0].title).toBe('Inception')
   })
 })
 
@@ -72,7 +72,7 @@ describe('GET /api/media/:id', () => {
     expect(res.status).toBe(200)
     expect(res.body.id).toBe(media.id)
     expect(res.body.title).toBe('Interstellar')
-    expect(Array.isArray(res.body.castRoles)).toBe(true)
+    expect(Array.isArray(res.body.cast)).toBe(true)
     expect(typeof res.body.communityCount).toBe('number')
     expect(res.body.communityAvg === null || typeof res.body.communityAvg === 'number').toBe(true)
   })
