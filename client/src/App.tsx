@@ -56,7 +56,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
       return (
         <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 p-8">
           <p className="text-xl font-semibold text-destructive">Something went wrong</p>
-          <p className="text-sm text-muted-foreground max-w-md text-center">{this.state.message}</p>
+          <p className="text-sm text-muted-foreground max-w-md text-center">An unexpected error occurred. Please try again or refresh the page.</p>
           <Button onClick={() => this.setState({ hasError: false, message: '' })}>Try again</Button>
         </div>
       )
