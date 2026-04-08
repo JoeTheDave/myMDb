@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Upload, X, Loader2, Trash2, Plus } from 'lucide-react'
-import { mediaApi, actorApi, castApi, uploadApi } from '@/lib/api'
+import { X, Loader2, Trash2, Plus } from 'lucide-react'
+import { mediaApi, actorApi, castApi } from '@/lib/api'
 import type { MediaFormData, CastRoleFormData, ContentRating, MediaType, ActorListItem } from '@/lib/types'
 import { MOVIE_RATINGS, TV_RATINGS, formatContentRating } from '@/lib/types'
 import { Input } from '@/components/ui/input'
@@ -11,78 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-interface ImageUploaderProps {
-  value?: string | undefined
-  onChange: (url: string | undefined) => void
-  label: string
-  aspect?: string
-}
-
-function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' }: ImageUploaderProps) {
-  const [uploading, setUploading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  async function handleFile(file: File) {
-    setUploading(true)
-    try {
-      const { url } = await uploadApi.upload(file)
-      onChange(url)
-    } catch {
-      toast.error('Upload failed')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <div
-        className={`relative ${aspect} max-w-[160px] rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
-        onClick={() => inputRef.current?.click()}
-      >
-        {value ? (
-          <>
-            <img src={value} alt="" className="w-full h-full object-cover" />
-            <button
-              type="button"
-              className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
-              onClick={e => {
-                e.stopPropagation()
-                onChange(undefined)
-              }}
-            >
-              <X className="size-3" />
-            </button>
-          </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
-            {uploading ? (
-              <Loader2 className="size-6 animate-spin" />
-            ) : (
-              <>
-                <Upload className="size-6 opacity-50" />
-                <span>Upload image</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={e => {
-          const file = e.target.files?.[0]
-          if (file) handleFile(file)
-          e.target.value = ''
-        }}
-      />
-    </div>
-  )
-}
+import { ImageUploader } from '@/components/ImageUploader'
 
 // Actor search autocomplete
 function ActorSearch({ onSelect }: { onSelect: (actor: ActorListItem) => void }) {
