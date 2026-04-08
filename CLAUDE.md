@@ -131,6 +131,31 @@ fly logs -a mymdb-staging
 
 CI/CD requires `FLY_API_TOKEN` in GitHub repo secrets.
 
+## Branching Convention
+All feature work branches from `develop`. Always:
+1. `git checkout develop && git pull origin develop`
+2. `git checkout -b feature/[feature-name]`
+3. Work on `feature/[feature-name]`
+4. Before merging to `develop`: bump the version in root `package.json` (major/minor/patch)
+5. PR `feature/[feature-name]` → `develop` → staging auto-deploys
+6. PR `develop` → `master` → production auto-deploys
+
+**Version guard**: Never merge a feature branch to `develop` if both have the same version. The feature branch version must be bumped first.
+
+## Version
+Tracked in root `package.json` (`"version"` field). Current version is the source of truth.
+- **major**: breaking changes (1.0.0 → 2.0.0)
+- **minor**: new feature, backwards compatible (1.0.0 → 1.1.0)
+- **patch**: bug fix or small improvement (1.0.0 → 1.0.1)
+
+Bump with: `npm version [major|minor|patch] --no-git-tag-version` from the project root.
+
+## Local Dev (from project root)
+```bash
+npm install       # installs concurrently at root
+npm run dev       # starts server (port 3001) + client (port 5173) concurrently
+```
+
 ## Non-Obvious Conventions
 
 - **Prisma binaryTargets**: `schema.prisma` includes `binaryTargets = ["native", "linux-musl-openssl-3.0.x"]` — required for the Alpine Linux runner on Fly.io. Do not remove this.
