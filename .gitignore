@@ -39,3 +39,6 @@ prisma/migrations/
 
 # Vite
 .vite/
+
+# Tool artifacts
+.playwright-mcp/
