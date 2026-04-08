@@ -190,11 +190,12 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
         return true
       })
 
+    const effectiveTotal = minRatingNum ? results.length : total
     res.json({
-      data: results,
-      total: minRatingNum ? results.length : total,
+      items: results,
+      total: effectiveTotal,
       page: pageNum,
-      limit: limitNum,
+      totalPages: Math.ceil(effectiveTotal / limitNum),
     })
   } catch (err) {
     logger.error({ logId: 'amber-seeking-leaf', err }, 'Failed to list media')
@@ -263,7 +264,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       synopsis: media.synopsis,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
-      castRoles: media.castRoles,
+      cast: media.castRoles,
       communityAvg,
       communityCount,
       userRating,

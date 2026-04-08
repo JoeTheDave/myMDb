@@ -96,7 +96,7 @@ export function AdminPage() {
             <Label>Role</Label>
             <Select
               value={addForm.role}
-              onValueChange={(v, _) => { if (v !== null) setAddForm(f => ({ ...f, role: v })) }}
+              onValueChange={(v) => { if (v !== null) setAddForm(f => ({ ...f, role: v })) }}
             >
               <SelectTrigger className="w-36">
                 <SelectValue />
@@ -152,7 +152,7 @@ export function AdminPage() {
                   <td className="px-4 py-3">
                     <Select
                       value={user.role}
-                      onValueChange={(v, _) => { if (v !== null) updateMutation.mutate({ id: user.id, data: { role: v } }) }}
+                      onValueChange={(v) => { if (v !== null) updateMutation.mutate({ id: user.id, data: { role: v } }) }}
                     >
                       <SelectTrigger className="w-28 h-7">
                         <SelectValue />
