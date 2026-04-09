@@ -129,7 +129,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
                 title: true,
                 imageUrl: true,
                 mediaType: true,
-                releaseDate: true,
+                releaseYear: true,
               },
             },
           },
@@ -147,12 +147,12 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       imageUrl: actor.imageUrl,
       birthday: actor.birthday,
       deathDay: actor.deathDay,
-      filmography: actor.castRoles.map((role: { id: string; characterName: string; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseDate: Date | null } }) => ({
+      filmography: actor.castRoles.map((role: { id: string; characterName: string; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
         id: role.media.id,
         title: role.media.title,
         imageUrl: role.media.imageUrl,
         mediaType: role.media.mediaType,
-        releaseDate: role.media.releaseDate,
+        releaseYear: role.media.releaseYear,
         characterName: role.characterName,
         roleImageUrl: role.roleImageUrl,
       })),

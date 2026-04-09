@@ -31,10 +31,9 @@ model Media {
   id            String         @id @default(uuid())
   title         String
   imageUrl      String?
-  releaseDate   DateTime?
+  releaseYear   Int?
   mediaType     MediaType      @default(MOVIE)
   contentRating ContentRating?
-  synopsis      String?
   castRoles     CastRole[]
   ratings       Rating[]
   createdAt     DateTime       @default(now())

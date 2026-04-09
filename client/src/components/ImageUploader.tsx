@@ -108,10 +108,10 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
           </div>
           <button
             type="button"
-            className="text-xs text-muted-foreground hover:text-foreground underline"
+            className="text-xs text-muted-foreground hover:text-foreground underline w-[160px] text-center cursor-pointer"
             onClick={() => inputRef.current?.click()}
           >
-            or upload from file →
+            or upload from file
           </button>
         </>
       )}

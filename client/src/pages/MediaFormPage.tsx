@@ -94,9 +94,8 @@ export function MediaFormPage() {
         mediaType: existing.mediaType,
       }
       if (existing.imageUrl) next.imageUrl = existing.imageUrl
-      if (existing.releaseDate) next.releaseDate = existing.releaseDate.slice(0, 10)
+      if (existing.releaseYear) next.releaseYear = existing.releaseYear
       if (existing.contentRating) next.contentRating = existing.contentRating
-      if (existing.synopsis) next.synopsis = existing.synopsis
       setForm(next)
     }
   }, [existing])
@@ -192,133 +191,126 @@ export function MediaFormPage() {
     <div className="container mx-auto px-4 py-6 max-w-2xl">
       <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit' : 'Add'} Movie/Show</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit}>
         {/* Title */}
         <div className="space-y-1.5">
-          <Label htmlFor="title">Title *</Label>
+          <Label htmlFor="title">Title</Label>
           <Input
             id="title"
             value={form.title}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
             placeholder="Enter title..."
+            className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
           />
           {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
         </div>
 
-        {/* Type */}
-        <div className="space-y-1.5">
-          <Label>Type</Label>
-          <div className="flex gap-2">
-            {(['MOVIE', 'SHOW'] as const).map(t => (
-              <Button
-                key={t}
-                type="button"
-                variant={form.mediaType === t ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleTypeChange(t)}
-                className={form.mediaType === t ? 'bg-gold text-black hover:bg-gold/90' : ''}
+        {/* Two-column section */}
+        <div className="grid grid-cols-2 gap-8 mt-6">
+          {/* Left column: Type + Poster */}
+          <div className="space-y-4">
+            {/* Type */}
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <div className="flex gap-2">
+                {(['MOVIE', 'SHOW'] as const).map(t => (
+                  <Button
+                    key={t}
+                    type="button"
+                    variant={form.mediaType === t ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleTypeChange(t)}
+                    className={form.mediaType === t ? 'bg-gold text-black hover:bg-gold/90' : ''}
+                  >
+                    {t === 'MOVIE' ? 'Movie' : 'Show'}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Poster */}
+            <ImageUploader
+              label="Poster Image"
+              value={form.imageUrl}
+              onChange={url => {
+                setForm(f => {
+                  const next: MediaFormData = { ...f }
+                  if (url) {
+                    next.imageUrl = url
+                  } else {
+                    delete next.imageUrl
+                  }
+                  return next
+                })
+              }}
+            />
+          </div>
+
+          {/* Right column: Release Date + Content Rating */}
+          <div className="space-y-4">
+            {/* Release year */}
+            <div className="space-y-1.5">
+              <Label htmlFor="releaseYear">Release Year</Label>
+              <Input
+                id="releaseYear"
+                type="number"
+                min={1888}
+                max={2100}
+                placeholder="e.g. 2024"
+                value={form.releaseYear ?? ''}
+                onChange={e => {
+                  const val = e.target.value
+                  setForm(f => {
+                    const next: MediaFormData = { ...f }
+                    if (val) {
+                      next.releaseYear = parseInt(val, 10)
+                    } else {
+                      delete next.releaseYear
+                    }
+                    return next
+                  })
+                }}
+              />
+            </div>
+
+            {/* Content rating */}
+            <div className="space-y-1.5">
+              <Label>Content Rating</Label>
+              <Select
+                key={form.mediaType}
+                value={form.contentRating ?? ''}
+                onValueChange={v => {
+                  setForm(f => {
+                    const next: MediaFormData = { ...f }
+                    if (v) {
+                      next.contentRating = v as ContentRating
+                    } else {
+                      delete next.contentRating
+                    }
+                    return next
+                  })
+                }}
               >
-                {t === 'MOVIE' ? 'Movie' : 'Show'}
-              </Button>
-            ))}
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select rating..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover" alignItemWithTrigger={false}>
+                  {ratingOptions.map(r => (
+                    <SelectItem key={r} value={r}>
+                      {formatContentRating(r)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
-        {/* Poster */}
-        <ImageUploader
-          label="Poster Image"
-          value={form.imageUrl}
-          onChange={url => {
-            setForm(f => {
-              const next: MediaFormData = { ...f }
-              if (url) {
-                next.imageUrl = url
-              } else {
-                delete next.imageUrl
-              }
-              return next
-            })
-          }}
-        />
-
-        {/* Release date */}
-        <div className="space-y-1.5">
-          <Label htmlFor="releaseDate">Release Date</Label>
-          <Input
-            id="releaseDate"
-            type="date"
-            value={form.releaseDate ?? ''}
-            onChange={e => {
-              const val = e.target.value
-              setForm(f => {
-                const next: MediaFormData = { ...f }
-                if (val) {
-                  next.releaseDate = val
-                } else {
-                  delete next.releaseDate
-                }
-                return next
-              })
-            }}
-          />
-        </div>
-
-        {/* Content rating */}
-        <div className="space-y-1.5">
-          <Label>Content Rating</Label>
-          <Select
-            value={form.contentRating ?? ''}
-            onValueChange={v => {
-              setForm(f => {
-                const next: MediaFormData = { ...f }
-                if (v) {
-                  next.contentRating = v as ContentRating
-                } else {
-                  delete next.contentRating
-                }
-                return next
-              })
-            }}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Select rating..." />
-            </SelectTrigger>
-            <SelectContent>
-              {ratingOptions.map(r => (
-                <SelectItem key={r} value={r}>
-                  {formatContentRating(r)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Synopsis */}
-        <div className="space-y-1.5">
-          <Label htmlFor="synopsis">Synopsis</Label>
-          <textarea
-            id="synopsis"
-            value={form.synopsis ?? ''}
-            onChange={e => {
-              const val = e.target.value
-              setForm(f => {
-                const next: MediaFormData = { ...f }
-                if (val) {
-                  next.synopsis = val
-                } else {
-                  delete next.synopsis
-                }
-                return next
-              })
-            }}
-            placeholder="Brief description..."
-            rows={4}
-            className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-          />
-        </div>
-
         {/* Submit */}
-        <div className="flex gap-3">
+        <div className="flex justify-end gap-3 mt-6">
+          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+            Cancel
+          </Button>
           <Button
             type="submit"
             disabled={saveMutation.isPending}
@@ -326,9 +318,6 @@ export function MediaFormPage() {
           >
             {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
             {isEdit ? 'Save Changes' : 'Create'}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
           </Button>
         </div>
       </form>
