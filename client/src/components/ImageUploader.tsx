@@ -42,7 +42,7 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
       }
       const imageType = imageItem.types.find(t => t.startsWith('image/'))!
       const blob = await imageItem.getType(imageType)
-      const file = new File([blob], 'clipboard-image.png', { type: blob.type })
+      const file = new File([blob], 'clipboard-image.png', { type: 'image/png' })
       await handleFile(file)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'NotAllowedError') {

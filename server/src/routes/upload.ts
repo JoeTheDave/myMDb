@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import multer from 'multer'
 import sharp from 'sharp'
 import { authenticate } from '../middleware/authenticate'
@@ -50,5 +50,14 @@ router.post(
     }
   },
 )
+
+router.use((err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
+  if (err instanceof multer.MulterError || err instanceof Error) {
+    logger.warn({ logId: 'brittle-filter-catch', err }, 'Upload rejected by multer')
+    res.status(400).json({ error: (err as Error).message })
+  } else {
+    res.status(500).json({ error: 'Unexpected upload error' })
+  }
+})
 
 export default router
