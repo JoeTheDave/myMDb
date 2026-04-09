@@ -43,10 +43,15 @@ describe('POST /api/upload', () => {
   it('returns 200 with url when file is uploaded successfully', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
+    // Minimal valid 1x1 PNG — sharp requires real image data now that it processes uploads
+    const pngBuffer = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
     const res = await request(app)
       .post('/api/upload')
       .set('Cookie', `token=${token}`)
-      .attach('file', Buffer.from('fake image data'), { filename: 'photo.jpg', contentType: 'image/jpeg' })
+      .attach('file', pngBuffer, { filename: 'photo.png', contentType: 'image/png' })
 
     expect(res.status).toBe(200)
     expect(res.body.url).toBeDefined()
