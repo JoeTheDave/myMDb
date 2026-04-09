@@ -161,9 +161,9 @@ export function MediaDetailPage() {
             {media.contentRating && (
               <Badge variant="outline">{formatContentRating(media.contentRating)}</Badge>
             )}
-            {media.releaseDate && (
+            {media.releaseYear && (
               <span className="text-sm text-muted-foreground">
-                {new Date(media.releaseDate).getFullYear()}
+                {media.releaseYear}
               </span>
             )}
           </div>
@@ -176,10 +176,6 @@ export function MediaDetailPage() {
             onRate={handleRate}
           />
 
-          {/* Synopsis */}
-          {media.synopsis && (
-            <p className="text-muted-foreground leading-relaxed max-w-2xl">{media.synopsis}</p>
-          )}
         </div>
       </div>
 

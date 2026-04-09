@@ -25,7 +25,6 @@ WORKDIR /app
 
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/server/node_modules ./server/node_modules
-COPY --from=builder /app/node_modules/.prisma/client ./server/node_modules/.prisma/client
 COPY --from=builder /app/server/src/prisma ./server/src/prisma
 COPY --from=builder /app/client/dist ./client/dist
 

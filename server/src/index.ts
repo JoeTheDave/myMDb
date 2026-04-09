@@ -19,7 +19,16 @@ import uploadRouter from './routes/upload'
 const app = express()
 
 // Security middleware
-app.use(helmet())
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'img-src': ["'self'", 'data:', '*.amazonaws.com'],
+      },
+    },
+  }),
+)
 app.use(
   cors({
     origin: process.env['FRONTEND_URL'] ?? 'http://localhost:5173',

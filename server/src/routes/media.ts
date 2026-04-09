@@ -19,9 +19,8 @@ const createMediaSchema = z.object({
   title: z.string().min(1),
   mediaType: z.enum(['MOVIE', 'SHOW']),
   imageUrl: z.string().url().optional(),
-  releaseDate: z.string().datetime({ offset: true }).optional(),
+  releaseYear: z.coerce.number().int().min(1888).max(2100).optional(),
   contentRating: contentRatingEnum.optional(),
-  synopsis: z.string().optional(),
 })
 
 const updateMediaSchema = createMediaSchema.partial()
@@ -54,10 +53,9 @@ type MediaListItem = {
   id: string
   title: string
   imageUrl: string | null
-  releaseDate: Date | null
+  releaseYear: number | null
   mediaType: string
   contentRating: string | null
-  synopsis: string | null
   createdAt: Date
   updatedAt: Date
   communityAvg: number | null
@@ -69,10 +67,9 @@ type MediaRow = {
   id: string
   title: string
   imageUrl: string | null
-  releaseDate: Date | null
+  releaseYear: number | null
   mediaType: string
   contentRating: string | null
-  synopsis: string | null
   createdAt: Date
   updatedAt: Date
   ratings: RatingRecord[]
@@ -98,7 +95,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       title?: { contains: string; mode: 'insensitive' }
       mediaType?: 'MOVIE' | 'SHOW'
       contentRating?: { in: ContentRatingValue[] }
-      releaseDate?: { gte?: Date; lte?: Date }
+      releaseYear?: { gte?: number; lte?: number }
       castRoles?: { some: { actorId: string } }
     } = {}
 
@@ -118,12 +115,12 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       }
     }
     if (yearFrom || yearTo) {
-      whereClause.releaseDate = {}
+      whereClause.releaseYear = {}
       if (yearFrom) {
-        whereClause.releaseDate.gte = new Date(`${yearFrom}-01-01T00:00:00.000Z`)
+        whereClause.releaseYear.gte = parseInt(yearFrom, 10)
       }
       if (yearTo) {
-        whereClause.releaseDate.lte = new Date(`${yearTo}-12-31T23:59:59.999Z`)
+        whereClause.releaseYear.lte = parseInt(yearTo, 10)
       }
     }
     if (actorId) {
@@ -142,10 +139,9 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           id: true,
           title: true,
           imageUrl: true,
-          releaseDate: true,
+          releaseYear: true,
           mediaType: true,
           contentRating: true,
-          synopsis: true,
           createdAt: true,
           updatedAt: true,
           ratings: {
@@ -172,10 +168,9 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           id: item.id,
           title: item.title,
           imageUrl: item.imageUrl,
-          releaseDate: item.releaseDate,
+          releaseYear: item.releaseYear,
           mediaType: item.mediaType,
           contentRating: item.contentRating,
-          synopsis: item.synopsis,
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
           communityAvg,
@@ -190,11 +185,12 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
         return true
       })
 
+    const effectiveTotal = minRatingNum ? results.length : total
     res.json({
-      data: results,
-      total: minRatingNum ? results.length : total,
+      items: results,
+      total: effectiveTotal,
       page: pageNum,
-      limit: limitNum,
+      totalPages: Math.ceil(effectiveTotal / limitNum),
     })
   } catch (err) {
     logger.error({ logId: 'amber-seeking-leaf', err }, 'Failed to list media')
@@ -217,10 +213,9 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         id: true,
         title: true,
         imageUrl: true,
-        releaseDate: true,
+        releaseYear: true,
         mediaType: true,
         contentRating: true,
-        synopsis: true,
         createdAt: true,
         updatedAt: true,
         castRoles: {
@@ -257,13 +252,12 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       id: media.id,
       title: media.title,
       imageUrl: media.imageUrl,
-      releaseDate: media.releaseDate,
+      releaseYear: media.releaseYear,
       mediaType: media.mediaType,
       contentRating: media.contentRating,
-      synopsis: media.synopsis,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
-      castRoles: media.castRoles,
+      cast: media.castRoles,
       communityAvg,
       communityCount,
       userRating,
@@ -292,18 +286,16 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Re
         title: parsed.data.title,
         mediaType: parsed.data.mediaType,
         imageUrl: parsed.data.imageUrl ?? null,
-        releaseDate: parsed.data.releaseDate ? new Date(parsed.data.releaseDate) : null,
+        releaseYear: parsed.data.releaseYear ?? null,
         contentRating: parsed.data.contentRating ?? null,
-        synopsis: parsed.data.synopsis ?? null,
       },
       select: {
         id: true,
         title: true,
         imageUrl: true,
-        releaseDate: true,
+        releaseYear: true,
         mediaType: true,
         contentRating: true,
-        synopsis: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -346,20 +338,16 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: 
         ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
         ...(parsed.data.mediaType !== undefined ? { mediaType: parsed.data.mediaType } : {}),
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
-        ...(parsed.data.releaseDate !== undefined
-          ? { releaseDate: parsed.data.releaseDate ? new Date(parsed.data.releaseDate) : null }
-          : {}),
+        ...(parsed.data.releaseYear !== undefined ? { releaseYear: parsed.data.releaseYear } : {}),
         ...(parsed.data.contentRating !== undefined ? { contentRating: parsed.data.contentRating } : {}),
-        ...(parsed.data.synopsis !== undefined ? { synopsis: parsed.data.synopsis } : {}),
       },
       select: {
         id: true,
         title: true,
         imageUrl: true,
-        releaseDate: true,
+        releaseYear: true,
         mediaType: true,
         contentRating: true,
-        synopsis: true,
         createdAt: true,
         updatedAt: true,
       },

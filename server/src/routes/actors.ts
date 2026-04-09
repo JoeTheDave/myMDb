@@ -93,7 +93,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       prisma.actor.count({ where }),
     ])
 
-    res.json({ data: actors, total, page: pageNum, limit: limitNum })
+    res.json({ items: actors, total, page: pageNum, totalPages: Math.ceil(total / limitNum) })
   } catch (err) {
     logger.error({ logId: 'mild-seeking-fern', err }, 'Failed to list actors')
     res.status(500).json({ error: 'Internal server error' })
@@ -129,7 +129,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
                 title: true,
                 imageUrl: true,
                 mediaType: true,
-                releaseDate: true,
+                releaseYear: true,
               },
             },
           },
@@ -141,7 +141,22 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       res.status(404).json({ error: 'Actor not found' })
       return
     }
-    res.json(actor)
+    res.json({
+      id: actor.id,
+      name: actor.name,
+      imageUrl: actor.imageUrl,
+      birthday: actor.birthday,
+      deathDay: actor.deathDay,
+      filmography: actor.castRoles.map((role: { id: string; characterName: string; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
+        id: role.media.id,
+        title: role.media.title,
+        imageUrl: role.media.imageUrl,
+        mediaType: role.media.mediaType,
+        releaseYear: role.media.releaseYear,
+        characterName: role.characterName,
+        roleImageUrl: role.roleImageUrl,
+      })),
+    })
   } catch (err) {
     logger.error({ logId: 'pure-finding-hawk', err }, 'Failed to fetch actor by id')
     res.status(500).json({ error: 'Internal server error' })

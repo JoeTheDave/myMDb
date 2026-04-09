@@ -31,7 +31,7 @@ export interface MediaListItem {
   imageUrl?: string
   mediaType: MediaType
   contentRating?: ContentRating
-  releaseDate?: string
+  releaseYear?: number
   communityAvg: number | null
   communityCount: number
   userRating?: number | null
@@ -61,8 +61,7 @@ export interface MediaDetail {
   imageUrl?: string
   mediaType: MediaType
   contentRating?: ContentRating
-  releaseDate?: string
-  synopsis?: string
+  releaseYear?: number
   cast: CastMemberDetail[]
   communityAvg: number | null
   communityCount: number
@@ -89,7 +88,7 @@ export interface ActorFilmographyItem {
   title: string
   imageUrl?: string
   mediaType: MediaType
-  releaseDate?: string
+  releaseYear?: number
   characterName: string
   roleImageUrl?: string
 }
@@ -138,9 +137,8 @@ export interface MediaFormData {
   title: string
   mediaType: MediaType
   imageUrl?: string | undefined
-  releaseDate?: string | undefined
+  releaseYear?: number | undefined
   contentRating?: ContentRating | undefined
-  synopsis?: string | undefined
 }
 
 export interface ActorFormData {
