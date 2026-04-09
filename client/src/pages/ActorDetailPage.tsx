@@ -143,8 +143,8 @@ export function ActorDetailPage() {
                   </div>
                 </div>
                 <p className="text-xs font-semibold truncate">{item.title}</p>
-                {item.releaseDate && (
-                  <p className="text-xs text-muted-foreground">{new Date(item.releaseDate).getFullYear()}</p>
+                {item.releaseYear && (
+                  <p className="text-xs text-muted-foreground">{item.releaseYear}</p>
                 )}
               </Link>
             ))}

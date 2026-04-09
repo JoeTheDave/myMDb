@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom'
-import { Badge } from '@/components/ui/badge'
 import { StarRating } from './StarRating'
 import { formatContentRating } from '@/lib/types'
 import type { MediaListItem } from '@/lib/types'
@@ -51,19 +50,6 @@ export function MediaCard({ media, userRating }: MediaCardProps) {
             </svg>
           </div>
         )}
-        {/* Type badge overlay */}
-        <div className="absolute top-2 left-2">
-          <Badge variant="secondary" className="text-xs font-semibold">
-            {media.mediaType === 'MOVIE' ? 'Movie' : 'Show'}
-          </Badge>
-        </div>
-        {media.contentRating && (
-          <div className="absolute top-2 right-2">
-            <Badge variant="outline" className="text-xs bg-background/80 backdrop-blur-sm">
-              {formatContentRating(media.contentRating)}
-            </Badge>
-          </div>
-        )}
       </div>
 
       {/* Info */}
@@ -71,8 +57,11 @@ export function MediaCard({ media, userRating }: MediaCardProps) {
         <h3 className="text-sm font-semibold truncate leading-tight" title={media.title}>
           {media.title}
         </h3>
-        {media.releaseDate && (
-          <p className="text-xs text-muted-foreground">{new Date(media.releaseDate).getFullYear()}</p>
+        {media.releaseYear && (
+          <p className="text-xs text-muted-foreground">{media.releaseYear}</p>
+        )}
+        {media.contentRating && (
+          <p className="text-xs text-muted-foreground">{formatContentRating(media.contentRating)}</p>
         )}
         <StarRating
           userRating={userRating ?? media.userRating ?? null}
