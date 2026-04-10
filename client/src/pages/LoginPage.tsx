@@ -1,17 +1,15 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Logo } from '@/components/Logo'
-import { Button } from '@/components/ui/button'
 
 export function LoginPage() {
   const [searchParams] = useSearchParams()
   const isUnauthorized = searchParams.get('error') === 'unauthorized'
 
-  // Force dark class on login page
+  // Login page is always dark
   useEffect(() => {
     document.documentElement.classList.add('dark')
     return () => {
-      // Restore from localStorage when leaving login
       const stored = localStorage.getItem('theme')
       if (stored === 'light') {
         document.documentElement.classList.remove('dark')
@@ -20,31 +18,31 @@ export function LoginPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#141414] flex flex-col items-center justify-center p-6">
-      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
+    <div className="min-h-screen bg-[#0a0a0b] flex flex-col items-center justify-center p-6">
+      <div className="flex flex-col items-center gap-10 w-full max-w-xs">
         {/* Logo */}
         <Logo size="lg" />
 
-        {/* Subtitle */}
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-semibold text-white">myMDb</h1>
-          <p className="text-muted-foreground text-sm">Your personal movie &amp; show database</p>
-        </div>
-
-        {/* Error callout */}
+        {/* Error */}
         {isUnauthorized && (
-          <div className="w-full rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="w-full rounded-lg border border-red-800/60 bg-red-950/40 px-4 py-3 text-sm text-red-400 text-center">
             <strong>Access denied.</strong> Your account is not authorized. Contact the admin to request access.
           </div>
         )}
 
-        {/* Sign in button */}
+        {/* Google SSO button */}
         <a href="/api/auth/google" className="w-full">
-          <Button
-            variant="default"
-            className="w-full h-11 bg-white text-gray-800 hover:bg-gray-100 border border-gray-300 font-medium gap-3"
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-3 h-11 px-4 rounded-lg
+              bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-500
+              border border-zinc-500/60
+              text-zinc-200 text-sm font-medium
+              transition-colors duration-150
+              cursor-pointer select-none"
           >
-            <svg className="size-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            {/* Google "G" logo */}
+            <svg className="size-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -63,7 +61,7 @@ export function LoginPage() {
               />
             </svg>
             Sign in with Google
-          </Button>
+          </button>
         </a>
       </div>
     </div>

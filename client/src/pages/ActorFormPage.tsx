@@ -75,7 +75,7 @@ export function ActorFormPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Name */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label htmlFor="name">Name *</Label>
           <Input
             id="name"
@@ -105,7 +105,7 @@ export function ActorFormPage() {
         />
 
         {/* Birthday */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label htmlFor="birthday">Birthday</Label>
           <Input
             id="birthday"
@@ -127,7 +127,7 @@ export function ActorFormPage() {
         </div>
 
         {/* Death day */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label htmlFor="deathDay">Death Day (if applicable)</Label>
           <Input
             id="deathDay"
