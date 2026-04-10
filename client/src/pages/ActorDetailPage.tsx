@@ -1,14 +1,194 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Trash2, User, Film } from 'lucide-react'
 import { toast } from 'sonner'
-import { actorApi } from '@/lib/api'
-import { hasMinRole, formatContentRating } from '@/lib/types'
-import { Badge } from '@/components/ui/badge'
+import { actorApi, castApi } from '@/lib/api'
+import { hasMinRole } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
+import { RoleImageSlot } from '@/components/RoleImageSlot'
+import type { ActorFilmographyItem } from '@/lib/types'
+
+function formatFullDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function calcAge(birthdayIso: string, asOfIso?: string): number {
+  const birth = new Date(birthdayIso)
+  const asOf = asOfIso ? new Date(asOfIso) : new Date()
+  let age = asOf.getFullYear() - birth.getFullYear()
+  const hadBirthday =
+    asOf.getMonth() > birth.getMonth() ||
+    (asOf.getMonth() === birth.getMonth() && asOf.getDate() >= birth.getDate())
+  if (!hadBirthday) age -= 1
+  return age
+}
+
+interface FilmographyCardProps {
+  item: ActorFilmographyItem
+  isEditor: boolean
+  actorId: string
+  onUpdated: (mediaId: string) => void
+}
+
+function FilmographyCard({ item, isEditor, onUpdated }: FilmographyCardProps) {
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committingRef = useRef(false)
+
+  function startEditing() {
+    setNameValue(item.characterName ?? '')
+    setEditingName(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  async function commitName() {
+    if (committingRef.current) return
+    committingRef.current = true
+    const trimmed = nameValue.trim()
+    setEditingName(false)
+    if (!trimmed || trimmed === (item.characterName ?? '')) {
+      committingRef.current = false
+      return
+    }
+    setSaving(true)
+    try {
+      await castApi.update(item.castRoleId, { characterName: trimmed })
+      onUpdated(item.id)
+    } catch {
+      toast.error('Failed to save role name')
+    } finally {
+      setSaving(false)
+      committingRef.current = false
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void commitName()
+    } else if (e.key === 'Escape') {
+      setEditingName(false)
+    }
+  }
+
+  async function handleRoleImageChange(url: string | undefined) {
+    await castApi.update(item.castRoleId, { roleImageUrl: url ?? undefined })
+    onUpdated(item.id)
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden bg-card border border-border flex flex-col group/card">
+      {/* Split image */}
+      <div className="flex aspect-square">
+        {/* Left: movie poster — clicking navigates to movie */}
+        <Link
+          to={`/movies/${item.id}`}
+          className="flex-1 relative overflow-hidden bg-muted block"
+          tabIndex={0}
+        >
+          {item.imageUrl ? (
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="w-full h-full object-cover object-top group-hover/card:scale-[1.02] transition-transform duration-300"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              <Film className="size-8 opacity-30" />
+            </div>
+          )}
+        </Link>
+
+        {/* Divider */}
+        <div className="w-px bg-border shrink-0" />
+
+        {/* Right: role image */}
+        <div className="flex-1 relative overflow-hidden">
+          {isEditor ? (
+            <RoleImageSlot
+              value={item.roleImageUrl}
+              onChange={handleRoleImageChange}
+            />
+          ) : item.roleImageUrl ? (
+            <img
+              src={item.roleImageUrl}
+              alt={`${item.characterName ?? ''} in ${item.title}`}
+              className="w-full h-full object-cover object-top"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full absolute inset-0 flex items-center justify-center text-muted-foreground bg-muted">
+              <User className="size-8 opacity-30" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-2 py-2.5 text-center space-y-0.5">
+        <Link
+          to={`/movies/${item.id}`}
+          className="text-sm font-semibold block truncate hover:text-gold transition-colors leading-tight"
+          title={item.title}
+        >
+          {item.title}
+        </Link>
+
+        {/* Character name */}
+        {editingName ? (
+          <input
+            ref={inputRef}
+            value={nameValue}
+            onChange={e => setNameValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => void commitName()}
+            disabled={saving}
+            className={cn(
+              'w-full text-xs text-center bg-transparent border-b border-gold/60',
+              'outline-none text-foreground disabled:opacity-50 pb-0.5',
+            )}
+          />
+        ) : item.characterName ? (
+          <p
+            className={cn(
+              'text-xs text-muted-foreground truncate',
+              isEditor && 'cursor-pointer hover:text-foreground transition-colors',
+              saving && 'opacity-50',
+            )}
+            title={isEditor ? 'Click to edit' : item.characterName}
+            onClick={isEditor ? startEditing : undefined}
+          >
+            {item.characterName}
+          </p>
+        ) : isEditor ? (
+          <button
+            type="button"
+            onClick={startEditing}
+            className="text-xs italic text-zinc-500 hover:text-zinc-400 transition-colors block w-full"
+          >
+            role
+          </button>
+        ) : (
+          <p className="text-xs text-muted-foreground/40">&nbsp;</p>
+        )}
+
+        {item.releaseYear ? (
+          <p className="text-xs text-muted-foreground/70">{item.releaseYear}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground/70">&nbsp;</p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function DetailSkeleton() {
   return (
@@ -51,11 +231,15 @@ export function ActorDetailPage() {
     onError: () => toast.error('Failed to delete actor'),
   })
 
+  function handleFilmographyUpdated(mediaId: string) {
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['actor', id] }),
+      queryClient.invalidateQueries({ queryKey: ['media', mediaId] }),
+    ])
+  }
+
   if (isLoading) return <DetailSkeleton />
   if (!actor) return <div className="container mx-auto px-4 py-6 text-muted-foreground">Not found</div>
-
-  const birthYear = actor.birthday ? new Date(actor.birthday).getFullYear() : null
-  const deathYear = actor.deathDay ? new Date(actor.deathDay).getFullYear() : null
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -95,10 +279,17 @@ export function ActorDetailPage() {
           </div>
 
           {/* Born / died */}
-          {birthYear && (
-            <p className="text-muted-foreground text-sm">
-              {deathYear ? `${birthYear} – ${deathYear}` : `Born ${birthYear}`}
-            </p>
+          {actor.birthday && (
+            <div className="text-muted-foreground text-sm space-y-0.5">
+              <p>
+                Born: {formatFullDate(actor.birthday)} ({calcAge(actor.birthday, actor.deathDay ?? undefined)})
+              </p>
+              {actor.deathDay && (
+                <p>
+                  Died: {formatFullDate(actor.deathDay)} ({calcAge(actor.birthday, actor.deathDay)})
+                </p>
+              )}
+            </div>
           )}
 
           {actor.bio && (
@@ -113,40 +304,13 @@ export function ActorDetailPage() {
           <h2 className="text-xl font-semibold mb-4">Filmography</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {actor.filmography.map(item => (
-              <Link
-                key={item.id}
-                to={`/movies/${item.id}`}
-                className="group flex flex-col hover:text-gold transition-colors"
-              >
-                <div className="aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2 relative">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground opacity-30">
-                      <svg className="size-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18" />
-                      </svg>
-                    </div>
-                  )}
-                  {/* Character overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                    <p className="text-white text-xs font-medium truncate">{item.characterName}</p>
-                  </div>
-                  <div className="absolute top-1 left-1">
-                    <Badge variant="secondary" className="text-xs px-1 py-0">
-                      {item.mediaType === 'MOVIE' ? 'M' : 'S'}
-                    </Badge>
-                  </div>
-                </div>
-                <p className="text-xs font-semibold truncate">{item.title}</p>
-                {item.releaseYear && (
-                  <p className="text-xs text-muted-foreground">{item.releaseYear}</p>
-                )}
-              </Link>
+              <FilmographyCard
+                key={item.castRoleId}
+                item={item}
+                isEditor={isEditor}
+                actorId={actor.id}
+                onUpdated={handleFilmographyUpdated}
+              />
             ))}
           </div>
         </section>
@@ -176,6 +340,3 @@ export function ActorDetailPage() {
     </div>
   )
 }
-
-// Export formatContentRating to keep the import above from being flagged as unused
-void formatContentRating

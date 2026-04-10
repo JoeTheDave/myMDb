@@ -400,7 +400,7 @@ export function MediaFormPage() {
                     {(member.roleImageUrl ?? member.actor.imageUrl) && (
                       <img
                         src={member.roleImageUrl ?? member.actor.imageUrl}
-                        alt={member.characterName}
+                        alt={member.characterName ?? ''}
                         className="w-full h-full object-cover"
                       />
                     )}

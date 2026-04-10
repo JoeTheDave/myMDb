@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2, User } from 'lucide-react'
+import { Edit2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { mediaApi } from '@/lib/api'
 import type { MediaDetail } from '@/lib/types'
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useState } from 'react'
+import { CastSection } from '@/components/CastSection'
 
 function DetailSkeleton() {
   return (
@@ -180,36 +181,13 @@ export function MediaDetailPage() {
       </div>
 
       {/* Cast */}
-      {media.cast.length > 0 && (
-        <section className="mt-10">
-          <h2 className="text-xl font-semibold mb-4">Cast</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {media.cast.map(member => (
-              <Link
-                key={member.id}
-                to={`/actors/${member.actor.id}`}
-                className="group flex flex-col items-center text-center hover:text-gold transition-colors"
-              >
-                <div className="aspect-[3/4] w-full rounded-lg overflow-hidden bg-muted mb-2">
-                  {member.roleImageUrl ?? member.actor.imageUrl ? (
-                    <img
-                      src={member.roleImageUrl ?? member.actor.imageUrl}
-                      alt={member.characterName}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <User className="size-8 opacity-30" />
-                    </div>
-                  )}
-                </div>
-                <p className="text-sm font-medium truncate w-full">{member.characterName}</p>
-                <p className="text-xs text-muted-foreground truncate w-full">{member.actor.name}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="mt-10">
+        <CastSection
+          mediaId={media.id}
+          cast={media.cast}
+          isEditor={isEditor}
+        />
+      </section>
 
       {/* Delete confirm dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
