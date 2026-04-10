@@ -3,14 +3,41 @@ import { toast } from 'sonner'
 import { Clipboard, X, Loader2 } from 'lucide-react'
 import { uploadApi } from '@/lib/api'
 
+const MAX_WIDTH = 600
+const MAX_HEIGHT = 900
+
+async function resizeIfNeeded(blob: Blob): Promise<Blob> {
+  return new Promise(resolve => {
+    const img = new Image()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const { width, height } = img
+      const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height, 1)
+      if (ratio >= 1) {
+        resolve(blob)
+        return
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(width * ratio)
+      canvas.height = Math.round(height * ratio)
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.92)
+    }
+    img.src = url
+  })
+}
+
 interface ImageUploaderProps {
   value?: string | undefined
   onChange: (url: string | undefined) => void
   label: string
   aspect?: string
+  className?: string
 }
 
-export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' }: ImageUploaderProps) {
+export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]', className = 'max-w-[160px]' }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
 
   async function handlePaste() {
@@ -27,7 +54,8 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
       }
       const imageType = imageItem.types.find(t => t.startsWith('image/'))!
       const blob = await imageItem.getType(imageType)
-      const file = new File([blob], 'clipboard-image.png', { type: 'image/png' })
+      const resized = await resizeIfNeeded(blob)
+      const file = new File([resized], 'clipboard-image.jpg', { type: 'image/jpeg' })
       setUploading(true)
       try {
         const { url } = await uploadApi.upload(file)
@@ -51,7 +79,7 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
       <p className="text-xs font-medium text-foreground leading-none select-none">{label}</p>
 
       <div
-        className={`relative ${aspect} max-w-[160px] rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
+        className={`relative ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
         onClick={value ? undefined : handlePaste}
       >
         {value ? (

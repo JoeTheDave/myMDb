@@ -188,26 +188,25 @@ export function MediaFormPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit' : 'Add'} Movie/Show</h1>
+      <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit' : 'Add'} Movie</h1>
 
       <form onSubmit={handleSubmit}>
-        {/* Title */}
-        <div className="space-y-1">
-          <Label htmlFor="title">Title</Label>
-          <Input
-            id="title"
-            value={form.title}
-            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="Enter title..."
-            className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
-          />
-          {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
-        </div>
+        <div className="flex gap-8">
+          {/* Left column: all form fields + actions */}
+          <div className="flex-1 min-w-0 space-y-5">
+            {/* Title */}
+            <div className="space-y-1">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="Enter title..."
+                className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
+              />
+              {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
+            </div>
 
-        {/* Two-column section */}
-        <div className="grid grid-cols-2 gap-8 mt-6">
-          {/* Left column: Type + Poster */}
-          <div className="space-y-4">
             {/* Type */}
             <div className="space-y-1">
               <Label>Type</Label>
@@ -227,26 +226,6 @@ export function MediaFormPage() {
               </div>
             </div>
 
-            {/* Poster */}
-            <ImageUploader
-              label="Poster Image"
-              value={form.imageUrl}
-              onChange={url => {
-                setForm(f => {
-                  const next: MediaFormData = { ...f }
-                  if (url) {
-                    next.imageUrl = url
-                  } else {
-                    delete next.imageUrl
-                  }
-                  return next
-                })
-              }}
-            />
-          </div>
-
-          {/* Right column: Release Date + Content Rating */}
-          <div className="space-y-4">
             {/* Release year */}
             <div className="space-y-1">
               <Label htmlFor="releaseYear">Release Year</Label>
@@ -299,22 +278,43 @@ export function MediaFormPage() {
                 ))}
               </Select>
             </div>
-          </div>
-        </div>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-3 mt-6">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={saveMutation.isPending}
-            className="bg-gold text-black hover:bg-gold/90 font-semibold"
-          >
-            {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Create'}
-          </Button>
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saveMutation.isPending}
+                className="bg-gold text-black hover:bg-gold/90 font-semibold"
+              >
+                {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                {isEdit ? 'Save Changes' : 'Create'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Right column: Poster image */}
+          <div className="w-48 shrink-0">
+            <ImageUploader
+              label="Poster"
+              aspect="aspect-[2/3]"
+              className="w-full"
+              value={form.imageUrl}
+              onChange={url => {
+                setForm(f => {
+                  const next: MediaFormData = { ...f }
+                  if (url) {
+                    next.imageUrl = url
+                  } else {
+                    delete next.imageUrl
+                  }
+                  return next
+                })
+              }}
+            />
+          </div>
         </div>
       </form>
 
