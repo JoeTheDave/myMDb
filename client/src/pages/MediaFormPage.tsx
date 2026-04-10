@@ -289,9 +289,9 @@ export function MediaFormPage() {
                     return next
                   })
                 }}
+                placeholder="Select rating…"
                 className="w-48"
               >
-                <SelectItem value="">Select rating...</SelectItem>
                 {ratingOptions.map(r => (
                   <SelectItem key={r} value={r}>
                     {formatContentRating(r)}

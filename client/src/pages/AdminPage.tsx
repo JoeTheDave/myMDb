@@ -149,7 +149,7 @@ export function AdminPage() {
                       <Select
                         value={user.role}
                         onValueChange={v => updateMutation.mutate({ id: user.id, data: { role: v } })}
-                        className="h-7 text-xs"
+                        size="sm"
                       >
                         {ROLES.map(r => (
                           <SelectItem key={r} value={r}>{r}</SelectItem>
