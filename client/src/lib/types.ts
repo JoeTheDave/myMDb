@@ -46,7 +46,7 @@ export interface MediaListResponse {
 
 export interface CastMemberDetail {
   id: string
-  characterName: string
+  characterName: string | null
   roleImageUrl?: string
   actor: {
     id: string
@@ -84,12 +84,13 @@ export interface ActorListResponse {
 }
 
 export interface ActorFilmographyItem {
+  castRoleId: string
   id: string
   title: string
   imageUrl?: string
   mediaType: MediaType
   releaseYear?: number
-  characterName: string
+  characterName: string | null
   roleImageUrl?: string
 }
 
@@ -150,7 +151,7 @@ export interface ActorFormData {
 
 export interface CastRoleFormData {
   actorId: string
-  characterName: string
+  characterName?: string | undefined
   roleImageUrl?: string | undefined
 }
 

@@ -73,7 +73,7 @@ model Actor {
 
 model CastRole {
   id            String   @id @default(uuid())
-  characterName String
+  characterName String?
   roleImageUrl  String?
   actorId       String
   mediaId       String

@@ -35,9 +35,10 @@ interface ImageUploaderProps {
   label: string
   aspect?: string
   className?: string
+  hideLabel?: boolean
 }
 
-export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]', className = 'max-w-[160px]' }: ImageUploaderProps) {
+export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]', className = 'max-w-[160px]', hideLabel = false }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
 
   async function handlePaste() {
@@ -75,8 +76,8 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]',
   }
 
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-foreground leading-none select-none">{label}</p>
+    <div className={hideLabel ? '' : 'space-y-1'}>
+      {!hideLabel && <p className="text-xs font-medium text-foreground leading-none select-none">{label}</p>}
 
       <div
         className={`relative ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
