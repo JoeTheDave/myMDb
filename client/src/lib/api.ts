@@ -53,8 +53,13 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
-      const body = (await res.json()) as { message?: string; error?: string }
-      message = body.message ?? body.error ?? message
+      const body = (await res.json()) as { message?: unknown; error?: unknown }
+      const raw = body.message ?? body.error
+      if (typeof raw === 'string') {
+        message = raw
+      } else if (raw != null) {
+        message = JSON.stringify(raw)
+      }
     } catch {
       // ignore parse errors
     }

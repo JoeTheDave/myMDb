@@ -21,8 +21,8 @@ const listQuerySchema = z.object({
 const createActorSchema = z.object({
   name: z.string().min(1),
   imageUrl: z.string().url().optional(),
-  birthday: z.string().datetime({ offset: true }).optional(),
-  deathDay: z.string().datetime({ offset: true }).optional(),
+  birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  deathDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 const updateActorSchema = createActorSchema.partial()

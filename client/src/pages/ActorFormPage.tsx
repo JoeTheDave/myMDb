@@ -10,6 +10,24 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ImageUploader } from '@/components/ImageUploader'
 
+// Attempts to parse free-form date text into YYYY-MM-DD.
+// Returns null if unparseable.
+function parseDateInput(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  // Already in YYYY-MM-DD — pass through to avoid UTC/local shift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+
+  const d = new Date(trimmed)
+  if (isNaN(d.getTime())) return null
+
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function ActorFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -24,14 +42,20 @@ export function ActorFormPage() {
 
   const [form, setForm] = useState<ActorFormData>({ name: '' })
   const [errors, setErrors] = useState<Partial<Record<keyof ActorFormData, string>>>({})
+  const [birthdayInput, setBirthdayInput] = useState('')
+  const [deathDayInput, setDeathDayInput] = useState('')
 
   useEffect(() => {
     if (existing) {
       const next: ActorFormData = { name: existing.name }
       if (existing.imageUrl) next.imageUrl = existing.imageUrl
-      if (existing.birthday) next.birthday = existing.birthday.slice(0, 10)
-      if (existing.deathDay) next.deathDay = existing.deathDay.slice(0, 10)
+      const birthday = existing.birthday ? existing.birthday.slice(0, 10) : undefined
+      const deathDay = existing.deathDay ? existing.deathDay.slice(0, 10) : undefined
+      if (birthday) next.birthday = birthday
+      if (deathDay) next.deathDay = deathDay
       setForm(next)
+      setBirthdayInput(birthday ?? '')
+      setDeathDayInput(deathDay ?? '')
     }
   }, [existing])
 
@@ -65,101 +89,105 @@ export function ActorFormPage() {
       <div className="container mx-auto px-4 py-6 animate-pulse space-y-4">
         <div className="h-8 bg-muted rounded w-1/3" />
         <div className="h-10 bg-muted rounded" />
+        <div className="h-10 bg-muted rounded" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-xl">
-      <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit' : 'Add'} Actor</h1>
+    <div className="container mx-auto px-4 py-6 max-w-2xl">
+      <form onSubmit={handleSubmit}>
+        <div className="flex gap-8">
+          {/* Left column: form fields + actions */}
+          <div className="flex-1 min-w-0 space-y-5">
+            <h1 className="text-2xl font-bold">{isEdit ? 'Edit' : 'Add'} Actor</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Name */}
-        <div className="space-y-1">
-          <Label htmlFor="name">Name *</Label>
-          <Input
-            id="name"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="Actor name..."
-          />
-          {errors['name'] && <p className="text-xs text-destructive">{errors['name']}</p>}
-        </div>
+            {/* Name */}
+            <div className="space-y-0.5">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className={errors['name'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
+              />
+              {errors['name'] && <p className="text-xs text-destructive">{errors['name']}</p>}
+            </div>
 
-        {/* Photo */}
-        <ImageUploader
-          label="Photo"
-          aspect="aspect-[3/4]"
-          value={form.imageUrl}
-          onChange={url => {
-            setForm(f => {
-              const next: ActorFormData = { ...f }
-              if (url) {
-                next.imageUrl = url
-              } else {
-                delete next.imageUrl
-              }
-              return next
-            })
-          }}
-        />
+            {/* Birthday */}
+            <div className="space-y-0.5">
+              <Label htmlFor="birthday">Birth</Label>
+              <Input
+                id="birthday"
+                value={birthdayInput}
+                onChange={e => setBirthdayInput(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseDateInput(birthdayInput)
+                  setBirthdayInput(parsed ?? '')
+                  setForm(f => {
+                    const next: ActorFormData = { ...f }
+                    if (parsed) { next.birthday = parsed } else { delete next.birthday }
+                    return next
+                  })
+                }}
+              />
+            </div>
 
-        {/* Birthday */}
-        <div className="space-y-1">
-          <Label htmlFor="birthday">Birthday</Label>
-          <Input
-            id="birthday"
-            type="date"
-            value={form.birthday ?? ''}
-            onChange={e => {
-              const val = e.target.value
-              setForm(f => {
-                const next: ActorFormData = { ...f }
-                if (val) {
-                  next.birthday = val
-                } else {
-                  delete next.birthday
-                }
-                return next
-              })
-            }}
-          />
-        </div>
+            {/* Death day */}
+            <div className="space-y-0.5">
+              <Label htmlFor="deathDay">Death</Label>
+              <Input
+                id="deathDay"
+                value={deathDayInput}
+                onChange={e => setDeathDayInput(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseDateInput(deathDayInput)
+                  setDeathDayInput(parsed ?? '')
+                  setForm(f => {
+                    const next: ActorFormData = { ...f }
+                    if (parsed) { next.deathDay = parsed } else { delete next.deathDay }
+                    return next
+                  })
+                }}
+              />
+            </div>
 
-        {/* Death day */}
-        <div className="space-y-1">
-          <Label htmlFor="deathDay">Death Day (if applicable)</Label>
-          <Input
-            id="deathDay"
-            type="date"
-            value={form.deathDay ?? ''}
-            onChange={e => {
-              const val = e.target.value
-              setForm(f => {
-                const next: ActorFormData = { ...f }
-                if (val) {
-                  next.deathDay = val
-                } else {
-                  delete next.deathDay
-                }
-                return next
-              })
-            }}
-          />
-        </div>
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saveMutation.isPending}
+                className="bg-gold text-black hover:bg-gold/90 font-semibold"
+              >
+                {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                {isEdit ? 'Save Changes' : 'Create'}
+              </Button>
+            </div>
+          </div>
 
-        <div className="flex gap-3">
-          <Button
-            type="submit"
-            disabled={saveMutation.isPending}
-            className="bg-gold text-black hover:bg-gold/90 font-semibold"
-          >
-            {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Create'}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
-          </Button>
+          {/* Right column: photo */}
+          <div className="w-72 shrink-0">
+            <ImageUploader
+              label="Photo"
+              aspect="aspect-[3/4]"
+              className="w-full"
+              value={form.imageUrl}
+              onChange={url => {
+                setForm(f => {
+                  const next: ActorFormData = { ...f }
+                  if (url) {
+                    next.imageUrl = url
+                  } else {
+                    delete next.imageUrl
+                  }
+                  return next
+                })
+              }}
+            />
+          </div>
         </div>
       </form>
     </div>
