@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { Clipboard, X, Loader2, RefreshCw } from 'lucide-react'
 import { uploadApi } from '@/lib/api'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 
 interface ImageUploaderProps {
@@ -55,7 +54,7 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
 
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <p className="text-sm font-medium text-foreground leading-none select-none">{label}</p>
       {value ? (
         <>
           <div
@@ -64,7 +63,7 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]' 
             <img src={value} alt="" className="w-full h-full object-cover" />
             <button
               type="button"
-              className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
+              className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background transition-colors"
               onClick={() => onChange(undefined)}
             >
               <X className="size-3" />

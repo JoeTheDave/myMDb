@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectItem } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 const ROLES = ['VIEWER', 'EDITOR', 'ADMIN'] as const
@@ -92,20 +92,15 @@ export function AdminPage() {
             />
             {addErrors['email'] && <p className="text-xs text-destructive">{addErrors['email']}</p>}
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 w-36">
             <Label>Role</Label>
             <Select
               value={addForm.role}
-              onValueChange={(v) => { if (v !== null) setAddForm(f => ({ ...f, role: v })) }}
+              onValueChange={v => setAddForm(f => ({ ...f, role: v }))}
             >
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map(r => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
+              {ROLES.map(r => (
+                <SelectItem key={r} value={r}>{r}</SelectItem>
+              ))}
             </Select>
           </div>
           <Button
@@ -150,19 +145,17 @@ export function AdminPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Select
-                      value={user.role}
-                      onValueChange={(v) => { if (v !== null) updateMutation.mutate({ id: user.id, data: { role: v } }) }}
-                    >
-                      <SelectTrigger className="w-28 h-7">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
+                    <div className="w-28">
+                      <Select
+                        value={user.role}
+                        onValueChange={v => updateMutation.mutate({ id: user.id, data: { role: v } })}
+                        className="h-7 text-xs"
+                      >
                         {ROLES.map(r => (
                           <SelectItem key={r} value={r}>{r}</SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </Select>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button

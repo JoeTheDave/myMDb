@@ -15,9 +15,10 @@ export function MediaCard({ media, userRating }: MediaCardProps) {
   return (
     <div
       className={cn(
-        'group cursor-pointer rounded-lg overflow-hidden',
+        'group cursor-pointer rounded-xl overflow-hidden',
         'bg-card border border-border',
-        'hover:ring-2 hover:ring-gold/60 transition-all',
+        'hover:ring-2 hover:ring-gold/50 hover:scale-[1.02]',
+        'transition-all duration-200',
       )}
       onClick={() => navigate(`/movies/${media.id}`)}
       role="button"

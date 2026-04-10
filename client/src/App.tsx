@@ -56,7 +56,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
       return (
         <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 p-8">
           <p className="text-xl font-semibold text-destructive">Something went wrong</p>
-          <p className="text-sm text-muted-foreground max-w-md text-center">An unexpected error occurred. Please try again or refresh the page.</p>
+          <p className="text-sm text-muted-foreground max-w-md text-center">
+            An unexpected error occurred. Please try again or refresh the page.
+          </p>
           <Button onClick={() => this.setState({ hasError: false, message: '' })}>Try again</Button>
         </div>
       )
@@ -79,7 +81,7 @@ function Navbar() {
     )
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="container mx-auto px-4 h-14 flex items-center gap-6">
         {/* Logo */}
         <NavLink to="/movies" className="shrink-0">
@@ -104,7 +106,13 @@ function Navbar() {
         <div className="flex-1" />
 
         {/* Theme toggle */}
-        <Button variant="ghost" size="icon-sm" onClick={toggleTheme} aria-label="Toggle theme">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+          className="text-muted-foreground hover:text-foreground"
+        >
           {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </Button>
 
@@ -112,21 +120,22 @@ function Navbar() {
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={
-                <button className="flex items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-              }
+              className="flex items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Avatar size="sm">
-                {user.imageUrl && <AvatarImage src={user.imageUrl} alt={user.name ?? user.email} />}
-                <AvatarFallback>
+                {user.imageUrl && (
+                  <AvatarImage src={user.imageUrl} alt={user.name ?? user.email} />
+                )}
+                <AvatarFallback size="sm">
                   {(user.name ?? user.email).charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent align="end">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{user.name ?? user.email}</p>
-                <p className="text-xs text-muted-foreground">{user.role}</p>
+              <div className="px-3 py-2">
+                <p className="text-sm font-medium text-foreground">{user.name ?? user.email}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{user.role}</p>
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -135,7 +144,7 @@ function Navbar() {
                   navigate('/login')
                 }}
               >
-                <LogOut className="size-4 mr-2" />
+                <LogOut className="size-4" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -146,7 +155,7 @@ function Navbar() {
   )
 }
 
-// ---- Layout shell (with navbar) ----
+// ---- Layout shell ----
 
 function AppLayout({ children }: { children: ReactNode }) {
   return (

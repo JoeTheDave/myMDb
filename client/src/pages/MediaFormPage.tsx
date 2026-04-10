@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectItem } from '@/components/ui/select'
 import { ImageUploader } from '@/components/ImageUploader'
 
 // Actor search autocomplete
@@ -42,7 +42,7 @@ function ActorSearch({ onSelect }: { onSelect: (actor: ActorListItem) => void })
             <button
               key={actor.id}
               type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2 transition-colors"
               onMouseDown={() => {
                 onSelect(actor)
                 setQ('')
@@ -143,7 +143,6 @@ export function MediaFormPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
-    // Strip contentRating if it doesn't match current type
     const validRatings = ratingOptions as readonly ContentRating[]
     const contentRating =
       form.contentRating && validRatings.includes(form.contentRating) ? form.contentRating : undefined
@@ -290,17 +289,14 @@ export function MediaFormPage() {
                     return next
                   })
                 }}
+                className="w-48"
               >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select rating..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover" alignItemWithTrigger={false}>
-                  {ratingOptions.map(r => (
-                    <SelectItem key={r} value={r}>
-                      {formatContentRating(r)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectItem value="">Select rating...</SelectItem>
+                {ratingOptions.map(r => (
+                  <SelectItem key={r} value={r}>
+                    {formatContentRating(r)}
+                  </SelectItem>
+                ))}
               </Select>
             </div>
           </div>
@@ -324,7 +320,7 @@ export function MediaFormPage() {
 
       {/* Cast section (edit mode only) */}
       {isEdit && existing && (
-        <section className="mt-10 border-t pt-8">
+        <section className="mt-10 border-t border-border pt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Cast</h2>
             <Button variant="outline" size="sm" onClick={() => setAddingCast(!addingCast)}>
