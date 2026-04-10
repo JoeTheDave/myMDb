@@ -81,7 +81,7 @@ export function AdminPage() {
       <div className="rounded-xl border border-border bg-card p-5 mb-8">
         <h2 className="text-base font-semibold mb-4">Add User</h2>
         <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-3 items-end">
-          <div className="flex-1 space-y-1.5">
+          <div className="flex-1 space-y-1">
             <Label htmlFor="addEmail">Email</Label>
             <Input
               id="addEmail"
@@ -92,7 +92,7 @@ export function AdminPage() {
             />
             {addErrors['email'] && <p className="text-xs text-destructive">{addErrors['email']}</p>}
           </div>
-          <div className="space-y-1.5 w-36">
+          <div className="space-y-1 w-36">
             <Label>Role</Label>
             <Select
               value={addForm.role}

@@ -97,7 +97,7 @@ export function ActorFilterBar({ filters, onFiltersChange }: ActorFilterBarProps
 
       <div className={cn('space-y-4', open ? 'block' : 'hidden md:block')}>
         {/* Search */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Search</Label>
           <Input
             placeholder="Actor name..."
@@ -107,7 +107,7 @@ export function ActorFilterBar({ filters, onFiltersChange }: ActorFilterBarProps
         </div>
 
         {/* Birth year range */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Birth Year</Label>
           <div className="flex items-center gap-2">
             <Input
@@ -133,7 +133,7 @@ export function ActorFilterBar({ filters, onFiltersChange }: ActorFilterBarProps
         </div>
 
         {/* Deceased toggle */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</Label>
           <Button
             variant={filters.deceased ? 'default' : 'outline'}

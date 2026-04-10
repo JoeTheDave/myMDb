@@ -192,7 +192,7 @@ export function MediaFormPage() {
 
       <form onSubmit={handleSubmit}>
         {/* Title */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label htmlFor="title">Title</Label>
           <Input
             id="title"
@@ -209,7 +209,7 @@ export function MediaFormPage() {
           {/* Left column: Type + Poster */}
           <div className="space-y-4">
             {/* Type */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label>Type</Label>
               <div className="flex gap-2">
                 {(['MOVIE', 'SHOW'] as const).map(t => (
@@ -248,7 +248,7 @@ export function MediaFormPage() {
           {/* Right column: Release Date + Content Rating */}
           <div className="space-y-4">
             {/* Release year */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label htmlFor="releaseYear">Release Year</Label>
               <Input
                 id="releaseYear"
@@ -273,7 +273,7 @@ export function MediaFormPage() {
             </div>
 
             {/* Content rating */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label>Content Rating</Label>
               <Select
                 key={form.mediaType}
@@ -332,7 +332,7 @@ export function MediaFormPage() {
           {/* Add cast form */}
           {addingCast && (
             <div className="rounded-lg border border-border bg-card p-4 mb-4 space-y-3">
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label>Actor</Label>
                 <ActorSearch onSelect={actor => setCastForm(f => ({ ...f, actor }))} />
                 {castForm.actor && (
@@ -344,7 +344,7 @@ export function MediaFormPage() {
                   </div>
                 )}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label>Character Name</Label>
                 <Input
                   placeholder="Character name..."
