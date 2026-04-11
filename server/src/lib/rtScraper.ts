@@ -25,9 +25,51 @@ function normalizeToSlug(title: string, stripSubtitle: boolean): string {
   return s
 }
 
+// If a slug contains "_part_N" (numeric) or "_part_word" (spelled-out), return the slug
+// with the alternative form of the number, or null if no substitution applies.
+// e.g. "dune_part_1" → "dune_part_one", "dune_part_two" → "dune_part_2"
+function slugOrdinalVariant(slug: string): string | null {
+  const NUM_TO_WORD: Record<string, string> = {
+    '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
+    '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
+  }
+  const WORD_TO_NUM = Object.fromEntries(Object.entries(NUM_TO_WORD).map(([k, v]) => [v, k]))
+
+  // _part_N → _part_word (with optional trailing _YEAR)
+  const numMatch = slug.match(/^(.*_part_)(\d+)(_\d{4})?$/)
+  if (numMatch) {
+    const word = NUM_TO_WORD[numMatch[2] ?? '']
+    if (word) return `${numMatch[1]}${word}${numMatch[3] ?? ''}`
+  }
+
+  // _part_word → _part_N (with optional trailing _YEAR)
+  const wordMatch = slug.match(/^(.*_part_)([a-z]+)(_\d{4})?$/)
+  if (wordMatch) {
+    const num = WORD_TO_NUM[wordMatch[2] ?? '']
+    if (num) return `${wordMatch[1]}${num}${wordMatch[3] ?? ''}`
+  }
+
+  return null
+}
+
 function buildCandidateUrls(title: string, releaseYear: number | null, mediaType: 'MOVIE' | 'SHOW'): string[] {
   const shortSlug = normalizeToSlug(title, true)
   const fullSlug = normalizeToSlug(title, false)
+
+  // Helper: push a slug (and its ordinal variant if applicable) as full RT URLs
+  const pushMovie = (slug: string, urls: string[]) => {
+    const url = `https://www.rottentomatoes.com/m/${slug}`
+    urls.push(url)
+    const variant = slugOrdinalVariant(slug)
+    if (variant) urls.push(`https://www.rottentomatoes.com/m/${variant}`)
+  }
+  const pushTV = (slug: string, suffix: string, urls: string[]) => {
+    const url = `https://www.rottentomatoes.com/tv/${slug}${suffix}`
+    urls.push(url)
+    const variant = slugOrdinalVariant(slug)
+    if (variant) urls.push(`https://www.rottentomatoes.com/tv/${variant}${suffix}`)
+  }
+
   const urls: string[] = []
 
   if (mediaType === 'MOVIE') {
@@ -35,25 +77,25 @@ function buildCandidateUrls(title: string, releaseYear: number | null, mediaType
     // This avoids landing on a same-name film from a different year or era
     // (e.g. LOTR 1978 animated at /m/the_lord_of_the_rings vs the 2001 film at the full-slug URL).
     if (releaseYear) {
-      urls.push(`https://www.rottentomatoes.com/m/${shortSlug}_${releaseYear}`)
+      pushMovie(`${shortSlug}_${releaseYear}`, urls)
       if (fullSlug !== shortSlug) {
-        urls.push(`https://www.rottentomatoes.com/m/${fullSlug}_${releaseYear}`)
+        pushMovie(`${fullSlug}_${releaseYear}`, urls)
       }
     }
-    urls.push(`https://www.rottentomatoes.com/m/${shortSlug}`)
+    pushMovie(shortSlug, urls)
     if (fullSlug !== shortSlug) {
-      urls.push(`https://www.rottentomatoes.com/m/${fullSlug}`)
+      pushMovie(fullSlug, urls)
     }
   } else {
-    urls.push(`https://www.rottentomatoes.com/tv/${shortSlug}/s01`)
-    urls.push(`https://www.rottentomatoes.com/tv/${shortSlug}`)
+    pushTV(shortSlug, '/s01', urls)
+    pushTV(shortSlug, '', urls)
     if (fullSlug !== shortSlug) {
-      urls.push(`https://www.rottentomatoes.com/tv/${fullSlug}/s01`)
-      urls.push(`https://www.rottentomatoes.com/tv/${fullSlug}`)
+      pushTV(fullSlug, '/s01', urls)
+      pushTV(fullSlug, '', urls)
     }
   }
 
-  return urls
+  return [...new Set(urls)] // deduplicate
 }
 
 async function fetchPage(url: string): Promise<string | null> {
@@ -112,6 +154,21 @@ function normalizeForComparison(s: string): string {
     .trim()
 }
 
+// Map spelled-out and Roman-numeral part numbers to digits for comparison.
+// e.g. "two" → "2", "iii" → "3"
+const PART_WORD_TO_NUM: Record<string, string> = {
+  one: '1', two: '2', three: '3', four: '4', five: '5',
+  six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
+  i: '1', ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8',
+}
+
+function extractPartNumber(s: string): string | null {
+  const m = s.match(/\bpart\s+(\w+)\b/i)
+  if (!m || !m[1]) return null
+  const raw = m[1].toLowerCase()
+  return PART_WORD_TO_NUM[raw] ?? raw
+}
+
 function titleSimilarity(html: string, storedTitle: string): number {
   const $ = cheerio.load(html)
   const rawPageTitle = $('title').first().text()
@@ -121,6 +178,19 @@ function titleSimilarity(html: string, storedTitle: string): number {
 
   if (!pageTitle || !normalized) return 0
   if (pageTitle === normalized) return 1
+
+  // Hard-reject if both titles reference a "part N" but the numbers disagree.
+  // "Dune - Part 1" vs "Dune: Part Two" → part numbers "1" vs "2" → different films.
+  const storedPart = extractPartNumber(storedTitle)
+  const pagePart   = extractPartNumber(rawPageTitle)
+  if (storedPart !== null && pagePart !== null && storedPart !== pagePart) return 0
+
+  // Stored title is a more-specific version of the page title — the user stored
+  // "Dune - Part 1" but RT's canonical page title is just "Dune (2021)".
+  // If removing the "part N" qualifier from the stored title yields the page title
+  // exactly, this is still a valid match.
+  const normalizedWithoutPart = normalized.replace(/\s+part\s+\w+$/, '').trim()
+  if (normalizedWithoutPart === pageTitle && normalizedWithoutPart.length > 0) return 0.85
 
   // Only treat as a prefix match when the PAGE title is longer than the stored title —
   // meaning RT uses a more specific name than we do (e.g. stored "Dune", page "Dune Part One").
