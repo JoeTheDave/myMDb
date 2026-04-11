@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import axios from 'axios'
-import * as cheerio from 'cheerio'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
@@ -417,62 +416,72 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  let html: string
+  // Step 1: Resolve IMDB ID to Wikidata Q-number
+  let wikidataId: string
   try {
-    const response = await axios.get(`https://www.imdb.com/title/${imdbId}/fullcredits/`, {
-      headers: BROWSER_HEADERS,
+    const searchResponse = await axios.get('https://www.wikidata.org/w/api.php', {
+      params: {
+        action: 'query',
+        list: 'search',
+        srsearch: `haswbstatement:P345=${imdbId}`,
+        format: 'json',
+      },
+      headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
       timeout: 15000,
     })
-    html = response.data as string
+    const searchData = searchResponse.data as { query?: { search?: Array<{ title?: string }> } }
+    const qid = searchData?.query?.search?.[0]?.title
+    if (!qid) {
+      logger.warn({ logId: 'pale-missing-wikidata', imdbId }, 'No Wikidata entity found for IMDB ID')
+      res.status(422).json({ error: 'Title not found in Wikidata. Verify the IMDB ID.' })
+      return
+    }
+    wikidataId = qid
   } catch (err) {
-    logger.error({ logId: 'faint-pulling-mast', err, imdbId }, 'Failed to fetch IMDB full credits page')
-    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+    logger.error({ logId: 'faint-pulling-mast', err, imdbId }, 'Failed to query Wikidata for IMDB ID')
+    res.status(422).json({ error: 'Title not found in Wikidata. Verify the IMDB ID.' })
     return
   }
 
-  let $ : cheerio.CheerioAPI
+  // Step 2: Run SPARQL query to get cast with character names
+  const sparqlQuery = `SELECT ?actorLabel ?characterLabel WHERE {
+  wd:${wikidataId} p:P161 ?role .
+  ?role ps:P161 ?actor .
+  OPTIONAL { ?role pq:P453 ?character }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+}`
+
+  let sparqlData: { results?: { bindings?: Array<{ actorLabel?: { value: string }; characterLabel?: { value: string } }> } }
   try {
-    $ = cheerio.load(html)
+    const sparqlResponse = await axios.get(`https://query.wikidata.org/sparql?query=${encodeURIComponent(sparqlQuery)}&format=json`, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'mymdb/1.0 (personal movie database)',
+      },
+      timeout: 15000,
+    })
+    sparqlData = sparqlResponse.data as typeof sparqlData
   } catch (err) {
-    logger.error({ logId: 'blunt-breaking-net', err }, 'Failed to parse IMDB HTML')
-    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+    logger.error({ logId: 'blunt-breaking-net', err, wikidataId }, 'Failed to fetch SPARQL cast data from Wikidata')
+    res.status(422).json({ error: 'No cast data found in Wikidata for this title.' })
     return
   }
 
-  const castTable = $('.cast_list, #cast')
-  if (!castTable.length) {
-    logger.warn({ logId: 'pale-missing-list', imdbId }, 'No cast table found on IMDB page')
-    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+  const bindings = sparqlData?.results?.bindings ?? []
+  if (bindings.length === 0) {
+    logger.warn({ logId: 'pale-missing-list', imdbId, wikidataId }, 'No cast bindings returned from Wikidata SPARQL')
+    res.status(422).json({ error: 'No cast data found in Wikidata for this title.' })
     return
   }
 
   const castEntries: Array<{ actorName: string; character: string }> = []
-  let stopProcessing = false
-
-  castTable.find('tr').each((_i, row) => {
-    if (stopProcessing) return
-    const rowText = $(row).text()
-    if (rowText.includes('Rest of cast listed alphabetically')) {
-      stopProcessing = true
-      return
-    }
-
-    // Try .primary_photo + td a first, then any /name/ link
-    let actorName = $(row).find('.primary_photo + td a').first().text().trim()
-    if (!actorName) {
-      $(row).find('a').each((_j, a) => {
-        const href = $(a).attr('href') ?? ''
-        if (href.includes('/name/') && !actorName) {
-          actorName = $(a).text().trim()
-        }
-      })
-    }
-
-    if (!actorName) return
-
-    const character = $(row).find('.character').text().replace(/\s+/g, ' ').trim()
+  for (const binding of bindings) {
+    const actorName = binding.actorLabel?.value ?? ''
+    // Filter out entries where actorLabel is a QID (no English label)
+    if (!actorName || /^Q\d+$/.test(actorName)) continue
+    const character = binding.characterLabel?.value ?? ''
     castEntries.push({ actorName, character })
-  })
+  }
 
   let imported = 0
   let matched = 0
@@ -562,45 +571,27 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     return
   }
 
-  const query = encodeURIComponent(`"${media.title}" ${media.releaseYear ?? ''} amazon prime video`.trim())
+  const query = encodeURIComponent(`${media.title} ${media.releaseYear ?? ''}`.trim())
 
   let html: string
   try {
-    const response = await axios.get(`https://html.duckduckgo.com/html/?q=${query}`, {
+    const response = await axios.get(`https://www.amazon.com/s?k=${query}&i=instant-video&rh=n%3A2858905011`, {
       headers: BROWSER_HEADERS,
       timeout: 15000,
     })
     html = response.data as string
   } catch (err) {
-    logger.error({ logId: 'grey-searching-prime', err, mediaId: id }, 'Failed to fetch DuckDuckGo results for Amazon lookup')
+    logger.error({ logId: 'grey-searching-prime', err, mediaId: id }, 'Failed to fetch Amazon search results for Amazon lookup')
     res.status(500).json({ error: 'Internal server error' })
     return
   }
 
-  const $ = cheerio.load(html)
-  const amazonPatterns = ['/dp/', '/gp/video/', '/Amazon-Video/', '/Prime-Video/']
+  const asinMatch = html.match(/\/dp\/([A-Z0-9]{10})/)
   let amazonPrimeUrl: string | null = null
 
-  $('a').each((_i, el) => {
-    if (amazonPrimeUrl) return
-    const href = $(el).attr('href') ?? ''
-    let resolvedHref = href
-    if (href.includes('duckduckgo.com/l/') || href.startsWith('//duckduckgo.com/l/')) {
-      try {
-        const full = href.startsWith('//') ? `https:${href}` : href
-        resolvedHref = decodeURIComponent(new URL(full).searchParams.get('uddg') ?? '') || href
-      } catch { /* use original href */ }
-    }
-    if (resolvedHref.includes('amazon.com') && amazonPatterns.some(p => resolvedHref.includes(p))) {
-      try {
-        const url = new URL(resolvedHref)
-        // Strip tracking params — keep only the pathname
-        amazonPrimeUrl = `${url.origin}${url.pathname}`
-      } catch {
-        amazonPrimeUrl = resolvedHref
-      }
-    }
-  })
+  if (asinMatch?.[1]) {
+    amazonPrimeUrl = `https://www.amazon.com/dp/${asinMatch[1]}/`
+  }
 
   if (!amazonPrimeUrl) {
     logger.info({ logId: 'calm-missing-prime', mediaId: id }, 'No Amazon Prime link found')
@@ -671,50 +662,27 @@ router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req
     return
   }
 
-  const query = encodeURIComponent(`"${media.title}" ${media.releaseYear ?? ''} official trailer youtube`.trim())
+  const query = encodeURIComponent(`${media.title} ${media.releaseYear ?? ''} official trailer`.trim())
 
   let html: string
   try {
-    const response = await axios.get(`https://html.duckduckgo.com/html/?q=${query}`, {
+    const response = await axios.get(`https://www.youtube.com/results?search_query=${query}`, {
       headers: BROWSER_HEADERS,
       timeout: 15000,
     })
     html = response.data as string
   } catch (err) {
-    logger.error({ logId: 'pale-searching-reel', err, mediaId: id }, 'Failed to fetch DuckDuckGo results for trailer lookup')
+    logger.error({ logId: 'pale-searching-reel', err, mediaId: id }, 'Failed to fetch YouTube search results for trailer lookup')
     res.status(500).json({ error: 'Internal server error' })
     return
   }
 
-  const $ = cheerio.load(html)
+  const videoIdMatch = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/)
   let trailerUrl: string | null = null
 
-  $('a').each((_i, el) => {
-    if (trailerUrl) return
-    const href = $(el).attr('href') ?? ''
-    let resolvedHref = href
-    if (href.includes('duckduckgo.com/l/') || href.startsWith('//duckduckgo.com/l/')) {
-      try {
-        const full = href.startsWith('//') ? `https:${href}` : href
-        resolvedHref = decodeURIComponent(new URL(full).searchParams.get('uddg') ?? '') || href
-      } catch { /* use original href */ }
-    }
-    let videoId: string | null = null
-
-    if (resolvedHref.includes('youtube.com/watch')) {
-      try {
-        const url = new URL(resolvedHref)
-        videoId = url.searchParams.get('v')
-      } catch { /* ignore */ }
-    } else if (resolvedHref.includes('youtu.be/')) {
-      const match = resolvedHref.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)
-      if (match) videoId = match[1] ?? null
-    }
-
-    if (videoId) {
-      trailerUrl = `https://www.youtube.com/watch?v=${videoId}`
-    }
-  })
+  if (videoIdMatch?.[1]) {
+    trailerUrl = `https://www.youtube.com/watch?v=${videoIdMatch[1]}`
+  }
 
   if (!trailerUrl) {
     logger.info({ logId: 'soft-missing-reel', mediaId: id }, 'No trailer found')

@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { app } from '../../index'
 import { createUser, makeToken, createMedia } from '../helpers'
 
-// Mock axios so tests don't hit real external APIs (IMDB, DuckDuckGo)
+// Mock axios so tests don't hit real external APIs (Wikidata, YouTube, Amazon)
 vi.mock('axios')
 import axios from 'axios'
 const mockAxiosGet = vi.mocked(axios.get)
@@ -14,33 +14,36 @@ const prisma = new PrismaClient(
   databaseUrl !== undefined ? { datasources: { db: { url: databaseUrl } } } : undefined,
 )
 
-// Minimal IMDB full-credits HTML with a cast table
-function makeImdbHtml(actors: Array<{ name: string; character: string }>) {
-  const rows = actors
-    .map(
-      ({ name, character }) => `
-    <tr>
-      <td class="primary_photo"><a href="/name/nm001/"><img /></a></td>
-      <td><a href="/name/nm001/">${name}</a></td>
-      <td class="character">${character}</td>
-    </tr>`,
-    )
-    .join('\n')
-
-  return `<html><body><table class="cast_list">${rows}</table></body></html>`
+// Minimal Wikidata API search response returning a Q-number
+function makeWikidataSearchResponse(qid: string) {
+  return { data: { query: { search: [{ title: qid }] } } }
 }
 
-// Minimal DuckDuckGo HTML with an Amazon Prime link
-function makeAmazonDDGHtml(amazonUrl: string) {
-  return `<html><body><a href="${amazonUrl}">Watch on Amazon</a></body></html>`
+// Minimal Wikidata SPARQL response with cast bindings
+function makeWikidataSparqlResponse(actors: Array<{ name: string; character: string }>) {
+  return {
+    data: {
+      results: {
+        bindings: actors.map(({ name, character }) => ({
+          actorLabel: { value: name },
+          characterLabel: { value: character },
+        })),
+      },
+    },
+  }
 }
 
-// Minimal DuckDuckGo HTML with a YouTube link
-function makeYoutubeDDGHtml(videoId: string) {
-  return `<html><body><a href="https://www.youtube.com/watch?v=${videoId}">Trailer</a></body></html>`
+// Minimal Amazon search page HTML with an ASIN in a /dp/ URL
+function makeAmazonHtml(asin: string) {
+  return `<html><body><a href="/dp/${asin}/">Watch on Amazon</a></body></html>`
 }
 
-// HTML with no useful links
+// Minimal YouTube search results page with embedded videoId JSON
+function makeYoutubeHtml(videoId: string) {
+  return `<html><body><script>var data = {"videoId":"${videoId}","title":"Trailer"};</script></body></html>`
+}
+
+// HTML with no useful data
 const EMPTY_HTML = '<html><body><p>No results.</p></body></html>'
 
 describe('POST /api/media/:id/cast/import', () => {
@@ -112,7 +115,7 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 422 when axios fails to fetch IMDB page', async () => {
+  it('returns 422 when the Wikidata search request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
@@ -122,30 +125,45 @@ describe('POST /api/media/:id/cast/import', () => {
       .set('Cookie', `token=${token}`)
       .send({ imdbId: 'tt9999999' })
     expect(res.status).toBe(422)
-    expect(res.body.error).toMatch(/IMDB/i)
+    expect(res.body.error).toMatch(/Wikidata/i)
   })
 
-  it('returns 422 when the IMDB page has no cast table', async () => {
+  it('returns 422 when Wikidata returns no entity for the IMDB ID', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
-    mockAxiosGet.mockResolvedValueOnce({ data: EMPTY_HTML })
+    mockAxiosGet.mockResolvedValueOnce({ data: { query: { search: [] } } })
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
       .set('Cookie', `token=${token}`)
       .send({ imdbId: 'tt9999999' })
     expect(res.status).toBe(422)
+    expect(res.body.error).toMatch(/Wikidata/i)
+  })
+
+  it('returns 422 when the SPARQL query returns no cast bindings', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia()
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    mockAxiosGet.mockResolvedValueOnce({ data: { results: { bindings: [] } } })
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt9999999' })
+    expect(res.status).toBe(422)
+    expect(res.body.error).toMatch(/cast data/i)
   })
 
   it('imports cast and returns summary on happy path for EDITOR', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Test Film' })
-    const html = makeImdbHtml([
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
       { name: 'Jane Smith', character: 'Hero' },
       { name: 'Bob Jones', character: 'Villain' },
-    ])
-    mockAxiosGet.mockResolvedValueOnce({ data: html })
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -165,8 +183,10 @@ describe('POST /api/media/:id/cast/import', () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
     const media = await createMedia({ title: 'Admin Film' })
-    const html = makeImdbHtml([{ name: 'Alice Walker', character: 'Protagonist' }])
-    mockAxiosGet.mockResolvedValueOnce({ data: html })
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q67890'))
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
+      { name: 'Alice Walker', character: 'Protagonist' },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -185,8 +205,10 @@ describe('POST /api/media/:id/cast/import', () => {
     // Pre-create an actor with the same name
     const existingActor = await prisma.actor.create({ data: { name: 'Jane Smith' } })
 
-    const html = makeImdbHtml([{ name: 'Jane Smith', character: 'Hero' }])
-    mockAxiosGet.mockResolvedValueOnce({ data: html })
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
+      { name: 'Jane Smith', character: 'Hero' },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -212,8 +234,10 @@ describe('POST /api/media/:id/cast/import', () => {
       data: { mediaId: media.id, actorId: existingActor.id, characterName: 'Hero' },
     })
 
-    const html = makeImdbHtml([{ name: 'Jane Smith', character: 'Hero' }])
-    mockAxiosGet.mockResolvedValueOnce({ data: html })
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
+      { name: 'Jane Smith', character: 'Hero' },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -229,8 +253,10 @@ describe('POST /api/media/:id/cast/import', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
-    const html = makeImdbHtml([{ name: 'Unique Actor Name', character: 'The Lead' }])
-    mockAxiosGet.mockResolvedValueOnce({ data: html })
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
+      { name: 'Unique Actor Name', character: 'The Lead' },
+    ]))
 
     await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -276,7 +302,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 500 when DuckDuckGo request fails', async () => {
+  it('returns 500 when Amazon search request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
@@ -306,8 +332,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Inception' })
-    const amazonUrl = 'https://www.amazon.com/gp/video/detail/B003EYVXV4'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonDDGHtml(amazonUrl) })
+    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonHtml('B003EYVXV4') })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -315,6 +340,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.amazonPrimeUrl).toContain('amazon.com')
+    expect(res.body.amazonPrimeUrl).toContain('B003EYVXV4')
 
     const updated = await prisma.media.findUnique({ where: { id: media.id }, select: { amazonPrimeUrl: true } })
     expect(updated?.amazonPrimeUrl).toContain('amazon.com')
@@ -324,8 +350,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
     const media = await createMedia({ title: 'The Matrix' })
-    const amazonUrl = 'https://www.amazon.com/dp/B001234567'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonDDGHtml(amazonUrl) })
+    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonHtml('B001234567') })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -335,12 +360,13 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.body.amazonPrimeUrl).not.toBeNull()
   })
 
-  it('strips tracking query params from the found Amazon URL', async () => {
+  it('constructs a clean URL without tracking params from the ASIN', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Dune' })
-    const dirtyUrl = 'https://www.amazon.com/dp/B001234567?ref=some-tracking&tag=foo&pf_rd=bar'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonDDGHtml(dirtyUrl) })
+    // The Amazon search page may have dirty /dp/ links — we only capture the ASIN and build a clean URL
+    const htmlWithDirtyLink = '<html><body><a href="/dp/B001234567?ref=some-tracking&tag=foo">Buy</a></body></html>'
+    mockAxiosGet.mockResolvedValueOnce({ data: htmlWithDirtyLink })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -349,6 +375,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.status).toBe(200)
     expect(res.body.amazonPrimeUrl).not.toContain('ref=')
     expect(res.body.amazonPrimeUrl).not.toContain('tag=')
+    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/dp/B001234567/')
   })
 })
 
@@ -509,7 +536,7 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 500 when DuckDuckGo request fails', async () => {
+  it('returns 500 when YouTube search request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
@@ -540,7 +567,7 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Inception' })
     const videoId = 'YoHD9XEInc0'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeDDGHtml(videoId) })
+    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -558,7 +585,7 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     const token = makeToken(admin)
     const media = await createMedia({ title: 'The Dark Knight' })
     const videoId = 'EXeTwQWrcwY'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeDDGHtml(videoId) })
+    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -573,7 +600,7 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     const token = makeToken(editor)
     const media = await createMedia()
     const videoId = 'ABC1234DEF5'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeDDGHtml(videoId) })
+    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
 
     await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -586,19 +613,20 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     expect(updated?.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoId}`)
   })
 
-  it('normalises youtu.be short links into full youtube.com watch URLs', async () => {
+  it('extracts the first videoId from embedded JSON in the YouTube search page', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
-    const media = await createMedia({ title: 'Short Link Film' })
-    const videoId = 'dQw4w9WgXcw'
-    const shortLinkHtml = `<html><body><a href="https://youtu.be/${videoId}">Trailer</a></body></html>`
-    mockAxiosGet.mockResolvedValueOnce({ data: shortLinkHtml })
+    const media = await createMedia({ title: 'Multi Result Film' })
+    const firstVideoId = 'dQw4w9WgXcw'
+    const secondVideoId = 'oHg5SJYRHA0'
+    const multiHtml = `<html><body><script>{"videoId":"${firstVideoId}"},{"videoId":"${secondVideoId}"}</script></body></html>`
+    mockAxiosGet.mockResolvedValueOnce({ data: multiHtml })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoId}`)
+    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${firstVideoId}`)
   })
 })
