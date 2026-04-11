@@ -16,7 +16,6 @@ model User {
   imageUrl  String?
   role      Role     @default(VIEWER)
   active    Boolean  @default(true)
-  ratings   Rating[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -34,9 +33,10 @@ model Media {
   releaseYear   Int?
   mediaType     MediaType      @default(MOVIE)
   contentRating ContentRating?
-  castRoles     CastRole[]
-  ratings       Rating[]
-  createdAt     DateTime       @default(now())
+  castRoles      CastRole[]
+  criticRating   Int?
+  audienceRating Int?
+  createdAt      DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
 
@@ -85,15 +85,3 @@ model CastRole {
   @@unique([actorId, mediaId])
 }
 
-model Rating {
-  id        String   @id @default(uuid())
-  stars     Int
-  userId    String
-  mediaId   String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, mediaId])
-}

@@ -105,13 +105,8 @@ export const mediaApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
   delete: (id: string) => apiFetch<void>('/api/media/' + id, { method: 'DELETE' }),
-  rate: (id: string, stars: number) =>
-    apiFetch<void>('/api/media/' + id + '/ratings', {
-      method: 'PUT',
-      body: JSON.stringify({ stars }),
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  deleteRating: (id: string) => apiFetch<void>('/api/media/' + id + '/ratings', { method: 'DELETE' }),
+  fetchRatings: (id: string) =>
+    apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/fetch-ratings', { method: 'PATCH' }),
 }
 
 export const actorApi = {

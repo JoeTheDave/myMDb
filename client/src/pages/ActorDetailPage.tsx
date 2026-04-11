@@ -260,9 +260,9 @@ export function ActorDetailPage() {
         </div>
 
         <div className="flex-1 space-y-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start justify-between gap-4">
             <h1 className="text-3xl font-bold">{actor.name}</h1>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               {isEditor && (
                 <Link to={`/actors/${actor.id}/edit`}>
                   <Button variant="outline" size="sm">

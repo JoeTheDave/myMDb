@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
 import { deleteS3Object } from '../lib/s3'
 import { logger } from '../lib/logger'
+import { fetchRTRatings, RTNotFoundError } from '../lib/rtScraper'
 
 const router = Router()
 
@@ -37,7 +38,6 @@ const listQuerySchema = z.object({
   contentRating: z.string().optional(),
   yearFrom: z.string().optional(),
   yearTo: z.string().optional(),
-  minRating: z.string().optional(),
   actorId: z.string().optional(),
   page: z.string().optional(),
   limit: z.string().optional(),
@@ -47,33 +47,6 @@ function isS3Url(url: string | null | undefined): boolean {
   return !!url && url.includes('.s3.') && url.includes('amazonaws.com')
 }
 
-type RatingRecord = { stars: number; userId: string }
-
-type MediaListItem = {
-  id: string
-  title: string
-  imageUrl: string | null
-  releaseYear: number | null
-  mediaType: string
-  contentRating: string | null
-  createdAt: Date
-  updatedAt: Date
-  communityAvg: number | null
-  communityCount: number
-  userRating: number | null
-}
-
-type MediaRow = {
-  id: string
-  title: string
-  imageUrl: string | null
-  releaseYear: number | null
-  mediaType: string
-  contentRating: string | null
-  createdAt: Date
-  updatedAt: Date
-  ratings: RatingRecord[]
-}
 
 // GET /api/media
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
@@ -82,7 +55,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
     res.status(400).json({ error: parsed.error.flatten() })
     return
   }
-  const { q, type, contentRating, yearFrom, yearTo, minRating, actorId, page, limit } = parsed.data
+  const { q, type, contentRating, yearFrom, yearTo, actorId, page, limit } = parsed.data
   const pageNum = Math.max(1, parseInt(page ?? '1', 10))
   const limitNum = Math.min(100, Math.max(1, parseInt(limit ?? '24', 10)))
   const skip = (pageNum - 1) * limitNum
@@ -127,8 +100,6 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       whereClause.castRoles = { some: { actorId } }
     }
 
-    const userId = req.user?.id
-
     const [items, total] = await Promise.all([
       prisma.media.findMany({
         where: whereClause,
@@ -142,55 +113,20 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           releaseYear: true,
           mediaType: true,
           contentRating: true,
+          criticRating: true,
+          audienceRating: true,
           createdAt: true,
           updatedAt: true,
-          ratings: {
-            select: { stars: true, userId: true },
-          },
         },
       }),
       prisma.media.count({ where: whereClause }),
     ])
 
-    const minRatingNum = minRating ? parseFloat(minRating) : undefined
-
-    const results = (items as MediaRow[])
-      .map((item: MediaRow) => {
-        const ratings = item.ratings
-        const communityCount = ratings.length
-        const communityAvg =
-          communityCount > 0
-            ? Math.round((ratings.reduce((sum: number, r: RatingRecord) => sum + r.stars, 0) / communityCount) * 10) /
-              10
-            : null
-        const userRating = userId ? (ratings.find((r: RatingRecord) => r.userId === userId)?.stars ?? null) : null
-        return {
-          id: item.id,
-          title: item.title,
-          imageUrl: item.imageUrl,
-          releaseYear: item.releaseYear,
-          mediaType: item.mediaType,
-          contentRating: item.contentRating,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-          communityAvg,
-          communityCount,
-          userRating,
-        }
-      })
-      .filter((item: MediaListItem) => {
-        if (minRatingNum !== undefined && minRatingNum > 0) {
-          return item.communityAvg !== null && item.communityAvg >= minRatingNum
-        }
-        return true
-      })
-
-    const effectiveTotal = minRatingNum ? results.length : total
     res.json({
-      items: results,
-      total: effectiveTotal,
+      items,
+      total,
       page: pageNum,
-      totalPages: Math.ceil(effectiveTotal / limitNum),
+      totalPages: Math.ceil(total / limitNum),
     })
   } catch (err) {
     logger.error({ logId: 'amber-seeking-leaf', err }, 'Failed to list media')
@@ -206,7 +142,6 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
     return
   }
   try {
-    const userId = req.user?.id
     const media = await prisma.media.findUnique({
       where: { id },
       select: {
@@ -216,6 +151,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         releaseYear: true,
         mediaType: true,
         contentRating: true,
+        criticRating: true,
+        audienceRating: true,
         createdAt: true,
         updatedAt: true,
         castRoles: {
@@ -229,9 +166,6 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
           },
           orderBy: { createdAt: 'asc' },
         },
-        ratings: {
-          select: { stars: true, userId: true },
-        },
       },
     })
 
@@ -240,14 +174,6 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       return
     }
 
-    const ratings = media.ratings as RatingRecord[]
-    const communityCount = ratings.length
-    const communityAvg =
-      communityCount > 0
-        ? Math.round((ratings.reduce((sum: number, r: RatingRecord) => sum + r.stars, 0) / communityCount) * 10) / 10
-        : null
-    const userRating = userId ? (ratings.find((r: RatingRecord) => r.userId === userId)?.stars ?? null) : null
-
     res.json({
       id: media.id,
       title: media.title,
@@ -255,12 +181,11 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       releaseYear: media.releaseYear,
       mediaType: media.mediaType,
       contentRating: media.contentRating,
+      criticRating: media.criticRating,
+      audienceRating: media.audienceRating,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
       cast: media.castRoles,
-      communityAvg,
-      communityCount,
-      userRating,
     })
   } catch (err) {
     logger.error({ logId: 'rich-finding-peak', err }, 'Failed to fetch media by id')
@@ -416,6 +341,43 @@ router.delete('/:id', authenticate, authorize('ADMIN'), async (req: Request<{ id
       return
     }
     logger.error({ logId: 'thin-falling-grove', err }, 'Failed to delete media')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// PATCH /api/media/:id/fetch-ratings
+router.patch('/:id/fetch-ratings', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const media = await prisma.media.findUnique({
+      where: { id },
+      select: { id: true, title: true, releaseYear: true, mediaType: true },
+    })
+    if (!media) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+
+    const { criticRating, audienceRating } = await fetchRTRatings(
+      media.title,
+      media.releaseYear,
+      media.mediaType as 'MOVIE' | 'SHOW',
+    )
+
+    const updated = await prisma.media.update({
+      where: { id },
+      data: { criticRating, audienceRating },
+      select: { criticRating: true, audienceRating: true },
+    })
+
+    logger.info({ logId: 'swift-pulling-score', mediaId: id, criticRating, audienceRating }, 'RT ratings fetched and saved')
+    res.json({ criticRating: updated.criticRating, audienceRating: updated.audienceRating })
+  } catch (err) {
+    if (err instanceof RTNotFoundError) {
+      res.status(422).json({ error: 'Could not find this title on Rotten Tomatoes.' })
+      return
+    }
+    logger.error({ logId: 'dark-failing-scrape', err }, 'Failed to fetch RT ratings')
     res.status(500).json({ error: 'Internal server error' })
   }
 })

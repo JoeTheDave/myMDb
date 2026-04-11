@@ -1,17 +1,16 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Trash2, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import { mediaApi } from '@/lib/api'
-import type { MediaDetail } from '@/lib/types'
+import { mediaApi, ApiError } from '@/lib/api'
 import { formatContentRating, hasMinRole } from '@/lib/types'
-import { StarRating } from '@/components/StarRating'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useState } from 'react'
 import { CastSection } from '@/components/CastSection'
+import { criticIcon, audienceIcon } from '@/lib/rtIcons'
 
 function DetailSkeleton() {
   return (
@@ -45,54 +44,17 @@ export function MediaDetailPage() {
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
   const isAdmin = user?.role === 'ADMIN'
 
-  // Rating mutation with optimistic update
-  const rateMutation = useMutation({
-    mutationFn: ({ stars }: { stars: number }) => mediaApi.rate(id!, stars),
-    onMutate: async ({ stars }) => {
-      await queryClient.cancelQueries({ queryKey: ['media', id] })
-      const prev = queryClient.getQueryData<MediaDetail>(['media', id])
-      if (prev) {
-        queryClient.setQueryData<MediaDetail>(['media', id], {
-          ...prev,
-          userRating: stars,
-        })
-      }
-      return { prev }
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) {
-        queryClient.setQueryData(['media', id], ctx.prev)
-      }
-      toast.error('Failed to save rating')
-    },
+  const fetchRatingsMutation = useMutation({
+    mutationFn: () => mediaApi.fetchRatings(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media', id] })
-      queryClient.invalidateQueries({ queryKey: ['media'] })
     },
-  })
-
-  const deleteRatingMutation = useMutation({
-    mutationFn: () => mediaApi.deleteRating(id!),
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ['media', id] })
-      const prev = queryClient.getQueryData<MediaDetail>(['media', id])
-      if (prev) {
-        queryClient.setQueryData<MediaDetail>(['media', id], {
-          ...prev,
-          userRating: null,
-        })
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 422) {
+        toast.error('Could not find this title on Rotten Tomatoes.')
+      } else {
+        toast.error('Failed to fetch ratings')
       }
-      return { prev }
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) {
-        queryClient.setQueryData(['media', id], ctx.prev)
-      }
-      toast.error('Failed to remove rating')
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media', id] })
-      queryClient.invalidateQueries({ queryKey: ['media'] })
     },
   })
 
@@ -106,16 +68,10 @@ export function MediaDetailPage() {
     onError: () => toast.error('Failed to delete'),
   })
 
-  function handleRate(stars: number) {
-    if (media?.userRating === stars) {
-      deleteRatingMutation.mutate()
-    } else {
-      rateMutation.mutate({ stars })
-    }
-  }
-
   if (isLoading) return <DetailSkeleton />
   if (!media) return <div className="container mx-auto px-4 py-6 text-muted-foreground">Not found</div>
+
+  const hasRatings = media.criticRating !== null || media.audienceRating !== null
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -138,9 +94,9 @@ export function MediaDetailPage() {
 
         {/* Details */}
         <div className="flex-1 space-y-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start justify-between gap-4">
             <h1 className="text-3xl font-bold">{media.title}</h1>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               {isEditor && (
                 <Link to={`/movies/${media.id}/edit`}>
                   <Button variant="outline" size="sm">
@@ -158,7 +114,6 @@ export function MediaDetailPage() {
 
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary">{media.mediaType === 'MOVIE' ? 'Movie' : 'Show'}</Badge>
             {media.contentRating && (
               <Badge variant="outline">{formatContentRating(media.contentRating)}</Badge>
             )}
@@ -169,14 +124,52 @@ export function MediaDetailPage() {
             )}
           </div>
 
-          {/* Rating */}
-          <StarRating
-            userRating={media.userRating ?? null}
-            communityAvg={media.communityAvg}
-            communityCount={media.communityCount}
-            onRate={handleRate}
-          />
-
+          {/* RT Ratings */}
+          {hasRatings ? (
+            <div className="flex gap-6 items-center">
+              {media.criticRating !== null && (
+                <div className="flex flex-col items-center gap-1">
+                  <img src={criticIcon(media.criticRating)} alt="Tomatometer" className="w-12 h-12" />
+                  <span className="text-xl font-bold">{media.criticRating}%</span>
+                  <span className="text-xs text-muted-foreground">Tomatometer</span>
+                </div>
+              )}
+              {media.audienceRating !== null && (
+                <div className="flex flex-col items-center gap-1">
+                  <img src={audienceIcon(media.audienceRating)} alt="Audience Score" className="w-12 h-12" />
+                  <span className="text-xl font-bold">{media.audienceRating}%</span>
+                  <span className="text-xs text-muted-foreground">Audience Score</span>
+                </div>
+              )}
+              {isEditor && (
+                <button
+                  onClick={() => fetchRatingsMutation.mutate()}
+                  disabled={fetchRatingsMutation.isPending}
+                  title="Refresh ratings"
+                  className="self-start mt-1 text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-30"
+                >
+                  <RefreshCw className={`size-3.5 ${fetchRatingsMutation.isPending ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+          ) : isEditor ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchRatingsMutation.mutate()}
+              disabled={fetchRatingsMutation.isPending}
+            >
+              {fetchRatingsMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 mr-1.5 animate-spin" /> Fetching...
+                </>
+              ) : (
+                <>
+                  <img src="/rt-icons/fresh.svg" className="w-5 h-5 mr-1.5" alt="" /> Fetch Ratings
+                </>
+              )}
+            </Button>
+          ) : null}
         </div>
       </div>
 

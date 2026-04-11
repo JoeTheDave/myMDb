@@ -32,9 +32,8 @@ export interface MediaListItem {
   mediaType: MediaType
   contentRating?: ContentRating
   releaseYear?: number
-  communityAvg: number | null
-  communityCount: number
-  userRating?: number | null
+  criticRating: number | null
+  audienceRating: number | null
 }
 
 export interface MediaListResponse {
@@ -63,9 +62,8 @@ export interface MediaDetail {
   contentRating?: ContentRating
   releaseYear?: number
   cast: CastMemberDetail[]
-  communityAvg: number | null
-  communityCount: number
-  userRating?: number | null
+  criticRating: number | null
+  audienceRating: number | null
 }
 
 export interface ActorListItem {

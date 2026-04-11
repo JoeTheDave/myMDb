@@ -1,15 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { StarRating } from './StarRating'
 import { formatContentRating } from '@/lib/types'
 import type { MediaListItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { criticIcon, audienceIcon } from '@/lib/rtIcons'
 
 interface MediaCardProps {
   media: MediaListItem
-  userRating?: number | null
 }
 
-export function MediaCard({ media, userRating }: MediaCardProps) {
+export function MediaCard({ media }: MediaCardProps) {
   const navigate = useNavigate()
 
   return (
@@ -64,13 +63,30 @@ export function MediaCard({ media, userRating }: MediaCardProps) {
         {media.contentRating && (
           <p className="text-xs text-muted-foreground">{formatContentRating(media.contentRating)}</p>
         )}
-        <StarRating
-          userRating={userRating ?? media.userRating ?? null}
-          communityAvg={media.communityAvg}
-          communityCount={media.communityCount}
-          readonly
-          size="sm"
-        />
+        {(media.criticRating !== null || media.audienceRating !== null) && (
+          <div className="flex gap-3 items-center pt-0.5">
+            {media.criticRating !== null && (
+              <div className="flex items-center gap-1">
+                <img
+                  src={criticIcon(media.criticRating)}
+                  alt="Tomatometer"
+                  className="w-4 h-4"
+                />
+                <span className="text-xs font-semibold">{media.criticRating}%</span>
+              </div>
+            )}
+            {media.audienceRating !== null && (
+              <div className="flex items-center gap-1">
+                <img
+                  src={audienceIcon(media.audienceRating)}
+                  alt="Audience Score"
+                  className="w-4 h-4"
+                />
+                <span className="text-xs font-semibold">{media.audienceRating}%</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

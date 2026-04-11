@@ -18,7 +18,6 @@ const prisma = new PrismaClient(
 )
 
 beforeEach(async () => {
-  await prisma.rating.deleteMany()
   await prisma.castRole.deleteMany()
   await prisma.media.deleteMany()
   await prisma.actor.deleteMany()
