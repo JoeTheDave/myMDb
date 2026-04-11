@@ -15,7 +15,16 @@ export function ImdbCastImport({ mediaId }: ImdbCastImportProps) {
   const [imdbId, setImdbId] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) {
+        clearTimeout(blurTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (isExpanded) {
@@ -26,7 +35,7 @@ export function ImdbCastImport({ mediaId }: ImdbCastImportProps) {
   const importMutation = useMutation({
     mutationFn: (id: string) => mediaApi.importCast(mediaId, id),
     onSuccess: (result) => {
-      toast.success(`Cast imported: ${result.added} added, ${result.matched} matched, ${result.skipped} skipped`)
+      toast.success(`Cast imported: ${result.imported} imported, ${result.created} created, ${result.matched} matched, ${result.skipped} skipped`)
       void queryClient.invalidateQueries({ queryKey: ['media', mediaId] })
       setIsExpanded(false)
       setImdbId('')
@@ -60,7 +69,7 @@ export function ImdbCastImport({ mediaId }: ImdbCastImportProps) {
 
   function handleBlur() {
     // Small delay so clicking the button doesn't collapse before it registers
-    setTimeout(() => {
+    blurTimerRef.current = setTimeout(() => {
       if (!importMutation.isPending) {
         setIsExpanded(false)
         setImdbId('')

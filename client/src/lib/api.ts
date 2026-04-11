@@ -108,7 +108,7 @@ export const mediaApi = {
   fetchRatings: (id: string) =>
     apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/fetch-ratings', { method: 'PATCH' }),
   importCast: (id: string, imdbId: string) =>
-    apiFetch<{ added: number; matched: number; skipped: number }>('/api/media/' + id + '/cast/import', {
+    apiFetch<{ imported: number; matched: number; created: number; skipped: number }>('/api/media/' + id + '/cast/import', {
       method: 'POST',
       body: JSON.stringify({ imdbId }),
       headers: { 'Content-Type': 'application/json' },
