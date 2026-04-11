@@ -404,7 +404,14 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  let media: { id: string } | null
+  try {
+    media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  } catch (err) {
+    logger.error({ logId: 'cold-seeking-cast', err, mediaId: id }, 'Failed to fetch media for cast import')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   if (!media) {
     res.status(404).json({ error: 'Media not found' })
     return
@@ -472,36 +479,57 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
   let created = 0
   let skipped = 0
 
+  // Batch-load existing actors and cast roles to avoid N+1 queries
+  const allNames = castEntries.map(e => e.actorName)
+
+  let existingActors: Array<{ id: string; name: string }>
+  let existingCastRoleActorIds: Array<{ actorId: string }>
+  try {
+    ;[existingActors, existingCastRoleActorIds] = await Promise.all([
+      prisma.actor.findMany({
+        where: { name: { in: allNames, mode: 'insensitive' } },
+        select: { id: true, name: true },
+      }),
+      prisma.castRole.findMany({
+        where: { mediaId: id },
+        select: { actorId: true },
+      }),
+    ])
+  } catch (err) {
+    logger.error({ logId: 'grey-loading-cast', err, mediaId: id }, 'Failed to batch-load actors/cast roles for import')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
+
+  const actorByName = new Map(existingActors.map(a => [a.name.toLowerCase(), a]))
+  const castRoleActorIds = new Set(existingCastRoleActorIds.map(r => r.actorId))
+
   for (let i = 0; i < castEntries.length; i++) {
     const entry = castEntries[i]
     if (!entry) continue
     const { actorName, character } = entry
     try {
-      const existingActor = await prisma.actor.findFirst({
-        where: { name: { equals: actorName, mode: 'insensitive' } },
-        select: { id: true },
-      })
+      const existingActor = actorByName.get(actorName.toLowerCase())
 
       if (existingActor) {
         matched++
-        const existingRole = await prisma.castRole.findFirst({
-          where: { mediaId: id, actorId: existingActor.id },
-          select: { id: true },
-        })
-        if (existingRole) {
+        if (castRoleActorIds.has(existingActor.id)) {
           skipped++
           continue
         }
         await prisma.castRole.create({
           data: { mediaId: id, actorId: existingActor.id, characterName: character || null },
         })
+        castRoleActorIds.add(existingActor.id)
         imported++
       } else {
         created++
         const newActor = await prisma.actor.create({ data: { name: actorName } })
+        actorByName.set(actorName.toLowerCase(), newActor)
         await prisma.castRole.create({
           data: { mediaId: id, actorId: newActor.id, characterName: character || null },
         })
+        castRoleActorIds.add(newActor.id)
         imported++
       }
     } catch (err) {
@@ -518,10 +546,17 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
 router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
 
-  const media = await prisma.media.findUnique({
-    where: { id },
-    select: { id: true, title: true, releaseYear: true },
-  })
+  let media: { id: string; title: string; releaseYear: number | null } | null
+  try {
+    media = await prisma.media.findUnique({
+      where: { id },
+      select: { id: true, title: true, releaseYear: true },
+    })
+  } catch (err) {
+    logger.error({ logId: 'grim-seeking-prime', err, mediaId: id }, 'Failed to fetch media for Amazon lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   if (!media) {
     res.status(404).json({ error: 'Media not found' })
     return
@@ -549,13 +584,20 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
   $('a').each((_i, el) => {
     if (amazonPrimeUrl) return
     const href = $(el).attr('href') ?? ''
-    if (href.includes('amazon.com') && amazonPatterns.some(p => href.includes(p))) {
+    let resolvedHref = href
+    if (href.includes('duckduckgo.com/l/') || href.startsWith('//duckduckgo.com/l/')) {
       try {
-        const url = new URL(href)
+        const full = href.startsWith('//') ? `https:${href}` : href
+        resolvedHref = decodeURIComponent(new URL(full).searchParams.get('uddg') ?? '') || href
+      } catch { /* use original href */ }
+    }
+    if (resolvedHref.includes('amazon.com') && amazonPatterns.some(p => resolvedHref.includes(p))) {
+      try {
+        const url = new URL(resolvedHref)
         // Strip tracking params — keep only the pathname
         amazonPrimeUrl = `${url.origin}${url.pathname}`
       } catch {
-        amazonPrimeUrl = href
+        amazonPrimeUrl = resolvedHref
       }
     }
   })
@@ -566,7 +608,13 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     return
   }
 
-  await prisma.media.update({ where: { id }, data: { amazonPrimeUrl } })
+  try {
+    await prisma.media.update({ where: { id }, data: { amazonPrimeUrl } })
+  } catch (err) {
+    logger.error({ logId: 'dark-saving-prime', err, mediaId: id }, 'Failed to save Amazon Prime URL')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   logger.info({ logId: 'keen-saving-prime', mediaId: id, amazonPrimeUrl }, 'Amazon Prime URL saved')
   res.json({ amazonPrimeUrl })
 })
@@ -576,7 +624,14 @@ router.patch('/:id/amazon-prime-url', authenticate, authorize('EDITOR'), async (
   const { id } = req.params
   const { amazonPrimeUrl } = req.body as { amazonPrimeUrl?: string | null }
 
-  const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  let media: { id: string } | null
+  try {
+    media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  } catch (err) {
+    logger.error({ logId: 'pale-seeking-prime', err, mediaId: id }, 'Failed to fetch media for amazon-prime-url patch')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   if (!media) {
     res.status(404).json({ error: 'Media not found' })
     return
@@ -600,10 +655,17 @@ router.patch('/:id/amazon-prime-url', authenticate, authorize('EDITOR'), async (
 router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
 
-  const media = await prisma.media.findUnique({
-    where: { id },
-    select: { id: true, title: true, releaseYear: true },
-  })
+  let media: { id: string; title: string; releaseYear: number | null } | null
+  try {
+    media = await prisma.media.findUnique({
+      where: { id },
+      select: { id: true, title: true, releaseYear: true },
+    })
+  } catch (err) {
+    logger.error({ logId: 'thin-seeking-reel', err, mediaId: id }, 'Failed to fetch media for trailer lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   if (!media) {
     res.status(404).json({ error: 'Media not found' })
     return
@@ -630,15 +692,22 @@ router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req
   $('a').each((_i, el) => {
     if (trailerUrl) return
     const href = $(el).attr('href') ?? ''
+    let resolvedHref = href
+    if (href.includes('duckduckgo.com/l/') || href.startsWith('//duckduckgo.com/l/')) {
+      try {
+        const full = href.startsWith('//') ? `https:${href}` : href
+        resolvedHref = decodeURIComponent(new URL(full).searchParams.get('uddg') ?? '') || href
+      } catch { /* use original href */ }
+    }
     let videoId: string | null = null
 
-    if (href.includes('youtube.com/watch')) {
+    if (resolvedHref.includes('youtube.com/watch')) {
       try {
-        const url = new URL(href)
+        const url = new URL(resolvedHref)
         videoId = url.searchParams.get('v')
       } catch { /* ignore */ }
-    } else if (href.includes('youtu.be/')) {
-      const match = href.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)
+    } else if (resolvedHref.includes('youtu.be/')) {
+      const match = resolvedHref.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)
       if (match) videoId = match[1] ?? null
     }
 
@@ -653,7 +722,13 @@ router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req
     return
   }
 
-  await prisma.media.update({ where: { id }, data: { trailerUrl } })
+  try {
+    await prisma.media.update({ where: { id }, data: { trailerUrl } })
+  } catch (err) {
+    logger.error({ logId: 'dark-saving-reel', err, mediaId: id }, 'Failed to save trailer URL')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
   logger.info({ logId: 'clear-saving-reel', mediaId: id, trailerUrl }, 'Trailer URL saved')
   res.json({ trailerUrl })
 })
