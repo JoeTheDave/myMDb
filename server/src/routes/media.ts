@@ -1,11 +1,19 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
 import { deleteS3Object } from '../lib/s3'
 import { logger } from '../lib/logger'
 import { fetchRTRatings, RTNotFoundError } from '../lib/rtScraper'
+
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+}
 
 const router = Router()
 
@@ -153,6 +161,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         contentRating: true,
         criticRating: true,
         audienceRating: true,
+        amazonPrimeUrl: true,
+        trailerUrl: true,
         createdAt: true,
         updatedAt: true,
         castRoles: {
@@ -183,6 +193,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       contentRating: media.contentRating,
       criticRating: media.criticRating,
       audienceRating: media.audienceRating,
+      amazonPrimeUrl: media.amazonPrimeUrl,
+      trailerUrl: media.trailerUrl,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
       cast: media.castRoles,
@@ -380,6 +392,270 @@ router.patch('/:id/fetch-ratings', authenticate, authorize('EDITOR'), async (req
     logger.error({ logId: 'dark-failing-scrape', err }, 'Failed to fetch RT ratings')
     res.status(500).json({ error: 'Internal server error' })
   }
+})
+
+// POST /api/media/:id/cast/import
+router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { imdbId } = req.body as { imdbId?: string }
+
+  if (!imdbId || !/^tt\d+$/.test(imdbId)) {
+    res.status(400).json({ error: 'Invalid imdbId. Must match /^tt\\d+$/' })
+    return
+  }
+
+  const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  if (!media) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  let html: string
+  try {
+    const response = await axios.get(`https://www.imdb.com/title/${imdbId}/fullcredits/`, {
+      headers: BROWSER_HEADERS,
+      timeout: 15000,
+    })
+    html = response.data as string
+  } catch (err) {
+    logger.error({ logId: 'faint-pulling-mast', err, imdbId }, 'Failed to fetch IMDB full credits page')
+    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+    return
+  }
+
+  let $ : cheerio.CheerioAPI
+  try {
+    $ = cheerio.load(html)
+  } catch (err) {
+    logger.error({ logId: 'blunt-breaking-net', err }, 'Failed to parse IMDB HTML')
+    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+    return
+  }
+
+  const castTable = $('.cast_list, #cast')
+  if (!castTable.length) {
+    logger.warn({ logId: 'pale-missing-list', imdbId }, 'No cast table found on IMDB page')
+    res.status(422).json({ error: 'Could not retrieve cast from IMDB. Check the ID and try again.' })
+    return
+  }
+
+  const castEntries: Array<{ actorName: string; character: string }> = []
+  let stopProcessing = false
+
+  castTable.find('tr').each((_i, row) => {
+    if (stopProcessing) return
+    const rowText = $(row).text()
+    if (rowText.includes('Rest of cast listed alphabetically')) {
+      stopProcessing = true
+      return
+    }
+
+    // Try .primary_photo + td a first, then any /name/ link
+    let actorName = $(row).find('.primary_photo + td a').first().text().trim()
+    if (!actorName) {
+      $(row).find('a').each((_j, a) => {
+        const href = $(a).attr('href') ?? ''
+        if (href.includes('/name/') && !actorName) {
+          actorName = $(a).text().trim()
+        }
+      })
+    }
+
+    if (!actorName) return
+
+    const character = $(row).find('.character').text().replace(/\s+/g, ' ').trim()
+    castEntries.push({ actorName, character })
+  })
+
+  let imported = 0
+  let matched = 0
+  let created = 0
+  let skipped = 0
+
+  for (let i = 0; i < castEntries.length; i++) {
+    const entry = castEntries[i]
+    if (!entry) continue
+    const { actorName, character } = entry
+    try {
+      const existingActor = await prisma.actor.findFirst({
+        where: { name: { equals: actorName, mode: 'insensitive' } },
+        select: { id: true },
+      })
+
+      if (existingActor) {
+        matched++
+        const existingRole = await prisma.castRole.findFirst({
+          where: { mediaId: id, actorId: existingActor.id },
+          select: { id: true },
+        })
+        if (existingRole) {
+          skipped++
+          continue
+        }
+        await prisma.castRole.create({
+          data: { mediaId: id, actorId: existingActor.id, characterName: character || null },
+        })
+        imported++
+      } else {
+        created++
+        const newActor = await prisma.actor.create({ data: { name: actorName } })
+        await prisma.castRole.create({
+          data: { mediaId: id, actorId: newActor.id, characterName: character || null },
+        })
+        imported++
+      }
+    } catch (err) {
+      logger.error({ logId: 'dull-skipping-cast', err, actorName }, 'Failed to import cast member')
+      skipped++
+    }
+  }
+
+  logger.info({ logId: 'swift-loading-cast', mediaId: id, imdbId, imported, matched, created, skipped }, 'Cast import complete')
+  res.json({ imported, matched, created, skipped })
+})
+
+// POST /api/media/:id/amazon-lookup
+router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+
+  const media = await prisma.media.findUnique({
+    where: { id },
+    select: { id: true, title: true, releaseYear: true },
+  })
+  if (!media) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  const query = encodeURIComponent(`"${media.title}" ${media.releaseYear ?? ''} amazon prime video`.trim())
+
+  let html: string
+  try {
+    const response = await axios.get(`https://html.duckduckgo.com/html/?q=${query}`, {
+      headers: BROWSER_HEADERS,
+      timeout: 15000,
+    })
+    html = response.data as string
+  } catch (err) {
+    logger.error({ logId: 'grey-searching-prime', err, mediaId: id }, 'Failed to fetch DuckDuckGo results for Amazon lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
+
+  const $ = cheerio.load(html)
+  const amazonPatterns = ['/dp/', '/gp/video/', '/Amazon-Video/', '/Prime-Video/']
+  let amazonPrimeUrl: string | null = null
+
+  $('a').each((_i, el) => {
+    if (amazonPrimeUrl) return
+    const href = $(el).attr('href') ?? ''
+    if (href.includes('amazon.com') && amazonPatterns.some(p => href.includes(p))) {
+      try {
+        const url = new URL(href)
+        // Strip tracking params — keep only the pathname
+        amazonPrimeUrl = `${url.origin}${url.pathname}`
+      } catch {
+        amazonPrimeUrl = href
+      }
+    }
+  })
+
+  if (!amazonPrimeUrl) {
+    logger.info({ logId: 'calm-missing-prime', mediaId: id }, 'No Amazon Prime link found')
+    res.json({ amazonPrimeUrl: null, message: 'No Amazon Prime link found.' })
+    return
+  }
+
+  await prisma.media.update({ where: { id }, data: { amazonPrimeUrl } })
+  logger.info({ logId: 'keen-saving-prime', mediaId: id, amazonPrimeUrl }, 'Amazon Prime URL saved')
+  res.json({ amazonPrimeUrl })
+})
+
+// PATCH /api/media/:id/amazon-prime-url
+router.patch('/:id/amazon-prime-url', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { amazonPrimeUrl } = req.body as { amazonPrimeUrl?: string | null }
+
+  const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+  if (!media) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  try {
+    const updated = await prisma.media.update({
+      where: { id },
+      data: { amazonPrimeUrl: amazonPrimeUrl ?? null },
+      select: { id: true, amazonPrimeUrl: true },
+    })
+    logger.info({ logId: 'bold-setting-prime', mediaId: id }, 'Amazon Prime URL updated')
+    res.json(updated)
+  } catch (err) {
+    logger.error({ logId: 'dark-patching-prime', err, mediaId: id }, 'Failed to update Amazon Prime URL')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /api/media/:id/trailer-lookup
+router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+
+  const media = await prisma.media.findUnique({
+    where: { id },
+    select: { id: true, title: true, releaseYear: true },
+  })
+  if (!media) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  const query = encodeURIComponent(`"${media.title}" ${media.releaseYear ?? ''} official trailer youtube`.trim())
+
+  let html: string
+  try {
+    const response = await axios.get(`https://html.duckduckgo.com/html/?q=${query}`, {
+      headers: BROWSER_HEADERS,
+      timeout: 15000,
+    })
+    html = response.data as string
+  } catch (err) {
+    logger.error({ logId: 'pale-searching-reel', err, mediaId: id }, 'Failed to fetch DuckDuckGo results for trailer lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
+
+  const $ = cheerio.load(html)
+  let trailerUrl: string | null = null
+
+  $('a').each((_i, el) => {
+    if (trailerUrl) return
+    const href = $(el).attr('href') ?? ''
+    let videoId: string | null = null
+
+    if (href.includes('youtube.com/watch')) {
+      try {
+        const url = new URL(href)
+        videoId = url.searchParams.get('v')
+      } catch { /* ignore */ }
+    } else if (href.includes('youtu.be/')) {
+      const match = href.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)
+      if (match) videoId = match[1] ?? null
+    }
+
+    if (videoId) {
+      trailerUrl = `https://www.youtube.com/watch?v=${videoId}`
+    }
+  })
+
+  if (!trailerUrl) {
+    logger.info({ logId: 'soft-missing-reel', mediaId: id }, 'No trailer found')
+    res.json({ trailerUrl: null, message: 'No trailer found.' })
+    return
+  }
+
+  await prisma.media.update({ where: { id }, data: { trailerUrl } })
+  logger.info({ logId: 'clear-saving-reel', mediaId: id, trailerUrl }, 'Trailer URL saved')
+  res.json({ trailerUrl })
 })
 
 function isNotFoundError(err: unknown): boolean {
