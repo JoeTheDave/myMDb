@@ -19,15 +19,40 @@ function makeWikidataSearchResponse(qid: string) {
   return { data: { query: { search: [{ title: qid }] } } }
 }
 
-// Minimal Wikidata SPARQL response with cast bindings
-function makeWikidataSparqlResponse(actors: Array<{ name: string; character: string }>) {
+// Minimal Wikidata SPARQL response with actor name bindings (no character lookup)
+function makeWikidataSparqlResponse(actors: Array<{ name: string }>) {
   return {
     data: {
       results: {
-        bindings: actors.map(({ name, character }) => ({
+        bindings: actors.map(({ name }) => ({
           actorLabel: { value: name },
-          characterLabel: { value: character },
         })),
+      },
+    },
+  }
+}
+
+// Wikidata sitelinks response returning a Wikipedia article title (or null for no article)
+function makeWikidataSitelinksResponse(qid: string, wikiTitle: string | null) {
+  return {
+    data: {
+      entities: {
+        [qid]: wikiTitle
+          ? { sitelinks: { enwiki: { title: wikiTitle } } }
+          : { sitelinks: {} },
+      },
+    },
+  }
+}
+
+// Wikipedia wikitext parse response with a cast section
+function makeWikipediaWikitextResponse(castLines: string) {
+  return {
+    data: {
+      parse: {
+        wikitext: {
+          '*': `== Cast ==\n${castLines}\n\n== Production ==\nSome text.`,
+        },
       },
     },
   }
@@ -145,7 +170,10 @@ describe('POST /api/media/:id/cast/import', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    // Calls 2 & 3 (parallel): sitelinks + empty SPARQL
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
     mockAxiosGet.mockResolvedValueOnce({ data: { results: { bindings: [] } } })
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -159,11 +187,18 @@ describe('POST /api/media/:id/cast/import', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Test Film' })
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', 'Test Film'))
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith', character: 'Hero' },
-      { name: 'Bob Jones', character: 'Villain' },
+      { name: 'Jane Smith' },
+      { name: 'Bob Jones' },
     ]))
+    // Call 4: Wikipedia wikitext with character names
+    mockAxiosGet.mockResolvedValueOnce(makeWikipediaWikitextResponse(
+      '* [[Jane Smith]] as [[Hero]], the main character\n* [[Bob Jones]] as Villain, the bad guy',
+    ))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -183,10 +218,14 @@ describe('POST /api/media/:id/cast/import', () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
     const media = await createMedia({ title: 'Admin Film' })
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q67890'))
+    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q67890', null))
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Alice Walker', character: 'Protagonist' },
+      { name: 'Alice Walker' },
     ]))
+    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -205,10 +244,14 @@ describe('POST /api/media/:id/cast/import', () => {
     // Pre-create an actor with the same name
     const existingActor = await prisma.actor.create({ data: { name: 'Jane Smith' } })
 
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith', character: 'Hero' },
+      { name: 'Jane Smith' },
     ]))
+    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -234,10 +277,14 @@ describe('POST /api/media/:id/cast/import', () => {
       data: { mediaId: media.id, actorId: existingActor.id, characterName: 'Hero' },
     })
 
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith', character: 'Hero' },
+      { name: 'Jane Smith' },
     ]))
+    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -253,10 +300,17 @@ describe('POST /api/media/:id/cast/import', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
+    // Call 1: Wikidata search → Q-number
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
+    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
+    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', 'Unique Actor Film'))
     mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Unique Actor Name', character: 'The Lead' },
+      { name: 'Unique Actor Name' },
     ]))
+    // Call 4: Wikipedia wikitext with character name
+    mockAxiosGet.mockResolvedValueOnce(makeWikipediaWikitextResponse(
+      '* [[Unique Actor Name]] as [[The Lead]], the protagonist',
+    ))
 
     await request(app)
       .post(`/api/media/${media.id}/cast/import`)

@@ -443,24 +443,46 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  // Step 2: Run SPARQL query to get cast with character names
-  const sparqlQuery = `SELECT ?actorLabel ?characterLabel WHERE {
+  // Step 2: Run Steps A and B in parallel
+  // Step A: Get Wikipedia article title from Wikidata sitelinks
+  // Step B: Simplified SPARQL for actor names only (no character lookup)
+  const simplifiedSparqlQuery = `SELECT ?actorLabel WHERE {
   wd:${wikidataId} p:P161 ?role .
   ?role ps:P161 ?actor .
-  OPTIONAL { ?role pq:P453 ?character }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
 }`
 
-  let sparqlData: { results?: { bindings?: Array<{ actorLabel?: { value: string }; characterLabel?: { value: string } }> } }
+  type SparqlData = { results?: { bindings?: Array<{ actorLabel?: { value: string } }> } }
+  type SitelinksData = { entities?: Record<string, { sitelinks?: { enwiki?: { title?: string } } }> }
+
+  let sparqlData: SparqlData
+  let wikiTitle: string | null
+
   try {
-    const sparqlResponse = await axios.get(`https://query.wikidata.org/sparql?query=${encodeURIComponent(sparqlQuery)}&format=json`, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'mymdb/1.0 (personal movie database)',
-      },
-      timeout: 15000,
-    })
-    sparqlData = sparqlResponse.data as typeof sparqlData
+    const [sitelinksResponse, sparqlResponse] = await Promise.all([
+      axios.get('https://www.wikidata.org/w/api.php', {
+        params: {
+          action: 'wbgetentities',
+          ids: wikidataId,
+          props: 'sitelinks',
+          sitefilter: 'enwiki',
+          format: 'json',
+        },
+        headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
+        timeout: 15000,
+      }),
+      axios.get(`https://query.wikidata.org/sparql?query=${encodeURIComponent(simplifiedSparqlQuery)}&format=json`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'mymdb/1.0 (personal movie database)',
+        },
+        timeout: 15000,
+      }),
+    ])
+
+    const sitelinksData = sitelinksResponse.data as SitelinksData
+    wikiTitle = sitelinksData?.entities?.[wikidataId]?.sitelinks?.enwiki?.title ?? null
+    sparqlData = sparqlResponse.data as SparqlData
   } catch (err) {
     logger.error({ logId: 'blunt-breaking-net', err, wikidataId }, 'Failed to fetch SPARQL cast data from Wikidata')
     res.status(422).json({ error: 'No cast data found in Wikidata for this title.' })
@@ -474,12 +496,60 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
+  // Step C: Fetch Wikipedia wikitext and parse cast section for character names
+  const wikiCharacterMap = new Map<string, string>()
+  if (wikiTitle) {
+    try {
+      const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
+        params: {
+          action: 'parse',
+          page: wikiTitle,
+          prop: 'wikitext',
+          format: 'json',
+        },
+        headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
+        timeout: 15000,
+      })
+      const wikiData = wikiResponse.data as { parse?: { wikitext?: { '*'?: string } } }
+      const wikitext = wikiData?.parse?.wikitext?.['*'] ?? ''
+
+      const castSectionMatch = wikitext.match(/==\s*[Cc]ast\s*==\s*([\s\S]+?)(?=\s*==|$)/)
+      if (castSectionMatch?.[1]) {
+        const castSection = castSectionMatch[1]
+        const lineRegex = /^\*\s+(.+?)\s+as\s+(.+)$/gm
+        let lineMatch: RegExpExecArray | null
+        while ((lineMatch = lineRegex.exec(castSection)) !== null) {
+          const rawActor = lineMatch[1] ?? ''
+          const rawChar = lineMatch[2] ?? ''
+
+          // Strip wiki markup: [[X|Y]] → Y, [[X]] → X
+          const stripMarkup = (s: string) =>
+            s.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
+             .replace(/\[\[([^\]]+)\]\]/g, '$1')
+             .trim()
+
+          const actorName = stripMarkup(rawActor)
+          const charFull = stripMarkup(rawChar)
+          // Take only the part before the first ", "
+          const charName = charFull.split(/, /)[0] ?? charFull
+
+          if (actorName) {
+            wikiCharacterMap.set(actorName.toLowerCase(), charName)
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn({ logId: 'soft-missing-wiki', err, wikiTitle }, 'Failed to fetch or parse Wikipedia wikitext; continuing with empty character names')
+    }
+  }
+
+  // Build cast entries: Wikidata SPARQL is source of truth for WHO; Wikipedia provides character names
   const castEntries: Array<{ actorName: string; character: string }> = []
   for (const binding of bindings) {
     const actorName = binding.actorLabel?.value ?? ''
     // Filter out entries where actorLabel is a QID (no English label)
     if (!actorName || /^Q\d+$/.test(actorName)) continue
-    const character = binding.characterLabel?.value ?? ''
+    const character = wikiCharacterMap.get(actorName.toLowerCase()) ?? ''
     castEntries.push({ actorName, character })
   }
 
