@@ -14,6 +14,7 @@ import actorsRouter from './routes/actors'
 import mediaRolesRouter from './routes/roles'
 import { rolesRouter } from './routes/roles'
 import uploadRouter from './routes/upload'
+import imagesRouter from './routes/images'
 
 const app = express()
 
@@ -54,6 +55,7 @@ app.use('/api/media/:id/roles', mediaRolesRouter)
 app.use('/api/actors', actorsRouter)
 app.use('/api/roles', rolesRouter)
 app.use('/api/upload', uploadRouter)
+app.use('/api/images', imagesRouter)
 
 // Serve static files in production
 if (process.env['NODE_ENV'] === 'production') {

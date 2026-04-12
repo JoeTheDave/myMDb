@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
-import { Clipboard, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Clipboard, Loader2, Lightbulb } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { uploadApi } from '@/lib/api'
+import { uploadApi, imageApi } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import { hasMinRole } from '@/lib/types'
 
 const MAX_WIDTH = 600
 const MAX_HEIGHT = 900
@@ -27,14 +29,148 @@ export async function resizeIfNeeded(blob: Blob): Promise<Blob> {
   })
 }
 
+interface ImageSearchResult {
+  thumbnailUrl: string
+  fullUrl: string
+}
+
+interface ImageSearchModalProps {
+  actorName: string
+  characterName: string | null
+  onSelect: (fullUrl: string) => void
+  onClose: () => void
+}
+
+function ImageSearchModal({ actorName, characterName, onSelect, onClose }: ImageSearchModalProps) {
+  const [loading, setLoading] = useState(true)
+  const [source, setSource] = useState<'google' | 'bing' | null>(null)
+  const [results, setResults] = useState<ImageSearchResult[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
+
+  const query = characterName ? `${actorName} ${characterName}` : actorName
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    imageApi.searchImages(query).then(data => {
+      if (cancelled) return
+      setSource(data.source)
+      setResults(data.results)
+    }).catch(() => {
+      if (cancelled) return
+      setError('Failed to load image results.')
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [query])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose()
+  }, [onClose])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.target === backdropRef.current) onClose()
+  }
+
+  function handleImageError(e: React.SyntheticEvent<HTMLImageElement>) {
+    const cell = (e.target as HTMLImageElement).closest<HTMLDivElement>('[data-image-cell]')
+    if (cell) cell.style.display = 'none'
+  }
+
+  return (
+    <div
+      ref={backdropRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+          <div>
+            <h3 className="text-sm font-semibold">Image Search</h3>
+            <p className="text-xs text-muted-foreground truncate max-w-[28rem]">{query}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none ml-4"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+              {error}
+            </div>
+          ) : (
+            <>
+              {source && (
+                <p className="text-[11px] text-muted-foreground/60 mb-3">
+                  Results from {source === 'google' ? 'Google' : 'Bing'}
+                </p>
+              )}
+              {results.length === 0 ? (
+                <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+                  No results found.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {results.map((result, i) => (
+                    <div
+                      key={i}
+                      data-image-cell
+                      className="aspect-square overflow-hidden rounded-lg cursor-pointer group/img bg-muted relative"
+                      onClick={() => onSelect(result.fullUrl)}
+                    >
+                      <img
+                        src={result.thumbnailUrl}
+                        alt=""
+                        className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105"
+                        onError={handleImageError}
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors duration-200" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface RoleImageSlotProps {
   value?: string | undefined
   onChange: (url: string | undefined) => Promise<void>
+  actorName: string
+  characterName: string | null
 }
 
-export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
+export function RoleImageSlot({ value, onChange, actorName, characterName }: RoleImageSlotProps) {
   const [uploading, setUploading] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { user } = useAuth()
+  const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -90,41 +226,83 @@ export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
     })()
   }
 
+  async function handleSearchSelect(fullUrl: string) {
+    setSearchOpen(false)
+    setUploading(true)
+    try {
+      const { imageUrl } = await imageApi.downloadImage(fullUrl)
+      await onChange(imageUrl)
+    } catch {
+      toast.error('Failed to download image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
-    <div
-      className={cn(
-        'absolute inset-0 flex items-center justify-center',
-        'bg-muted cursor-pointer group/slot',
-        !value && 'hover:bg-muted/80 transition-colors',
-      )}
-      onClick={value ? undefined : handlePaste}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      {uploading ? (
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      ) : value ? (
-        <>
-          <img src={value} alt="" className="w-full h-full object-cover object-top" />
-          {/* Hover overlay to replace */}
-          <div
-            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity bg-black/50 cursor-pointer"
-            onClick={handlePaste}
-          >
-            <Clipboard className="size-5 text-white opacity-80" />
+    <>
+      <div
+        className={cn(
+          'absolute inset-0 flex items-center justify-center',
+          'bg-muted cursor-pointer group/slot',
+          !value && 'hover:bg-muted/80 transition-colors',
+        )}
+        onClick={value ? undefined : handlePaste}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        {uploading ? (
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        ) : value ? (
+          <>
+            <img src={value} alt="" className="w-full h-full object-cover object-top" />
+            {/* Hover overlay to replace */}
+            <div
+              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity bg-black/50 cursor-pointer"
+              onClick={handlePaste}
+            >
+              <Clipboard className="size-5 text-white opacity-80" />
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-muted-foreground/70">
+            <Clipboard className="size-5 opacity-40" />
+            <span className="text-[10px] leading-tight text-center px-1">Role Image</span>
           </div>
-        </>
-      ) : (
-        <div className="flex flex-col items-center gap-1 text-muted-foreground/70">
-          <Clipboard className="size-5 opacity-40" />
-          <span className="text-[10px] leading-tight text-center px-1">Role Image</span>
-        </div>
+        )}
+
+        {/* Lightbulb button — EDITOR+ only, bottom-right corner, visible on hover */}
+        {isEditor && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setSearchOpen(true) }}
+            className={cn(
+              'absolute bottom-1.5 right-1.5 z-10',
+              'size-6 rounded-full bg-black/60 text-white',
+              'flex items-center justify-center',
+              'opacity-0 group-hover/slot:opacity-100 transition-all duration-150',
+              'hover:scale-110 hover:brightness-125',
+            )}
+            aria-label="Search for image"
+          >
+            <Lightbulb className="size-3.5" />
+          </button>
+        )}
+      </div>
+
+      {searchOpen && (
+        <ImageSearchModal
+          actorName={actorName}
+          characterName={characterName}
+          onSelect={url => { void handleSearchSelect(url) }}
+          onClose={() => setSearchOpen(false)}
+        />
       )}
-    </div>
+    </>
   )
 }

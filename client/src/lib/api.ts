@@ -199,3 +199,16 @@ export const uploadApi = {
     return apiFetch<{ url: string }>('/api/upload', { method: 'POST', body: form })
   },
 }
+
+export const imageApi = {
+  searchImages: (query: string) =>
+    apiFetch<{ source: 'google' | 'bing'; results: Array<{ thumbnailUrl: string; fullUrl: string }> }>(
+      `/api/images/search?q=${encodeURIComponent(query)}`,
+    ),
+  downloadImage: (url: string) =>
+    apiFetch<{ imageUrl: string }>('/api/images/download', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+}
