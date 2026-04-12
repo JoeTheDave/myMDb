@@ -150,6 +150,7 @@ export const actorApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
   delete: (id: string) => apiFetch<void>('/api/actors/' + id, { method: 'DELETE' }),
+  purge: () => apiFetch<{ deleted: number }>('/api/actors/purge', { method: 'DELETE' }),
 }
 
 export const castApi = {
