@@ -1,5 +1,7 @@
 export type Role = 'ADMIN' | 'EDITOR' | 'VIEWER'
 
+export type CastSortOrder = 'BY_ACTOR' | 'BY_ROLE' | 'CUSTOM'
+
 export type MediaType = 'MOVIE' | 'SHOW'
 
 export type ContentRating =
@@ -47,6 +49,7 @@ export interface CastMemberDetail {
   id: string
   characterName: string | null
   roleImageUrl?: string
+  billingOrder: number
   actor: {
     id: string
     name: string
@@ -62,6 +65,7 @@ export interface MediaDetail {
   contentRating?: ContentRating
   releaseYear?: number
   cast: CastMemberDetail[]
+  castSortOrder: CastSortOrder
   criticRating: number | null
   audienceRating: number | null
   amazonPrimeUrl: string | null

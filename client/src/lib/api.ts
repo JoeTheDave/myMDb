@@ -12,6 +12,7 @@ import type {
   MediaFormData,
   ActorFormData,
   CastRoleFormData,
+  CastSortOrder,
 } from './types'
 
 export type {
@@ -28,6 +29,7 @@ export type {
   MediaFormData,
   ActorFormData,
   CastRoleFormData,
+  CastSortOrder,
 }
 
 const BASE_URL: string = import.meta.env['VITE_API_URL'] ?? ''
@@ -123,6 +125,12 @@ export const mediaApi = {
     apiFetch<{ amazonPrimeUrl: string | null }>('/api/media/' + id + '/amazon-lookup', { method: 'POST' }),
   lookupTrailer: (id: string) =>
     apiFetch<{ trailerUrl: string | null }>('/api/media/' + id + '/trailer-lookup', { method: 'POST' }),
+  updateCastSort: (id: string, castSortOrder: CastSortOrder) =>
+    apiFetch<{ castSortOrder: CastSortOrder }>('/api/media/' + id + '/cast-sort', {
+      method: 'PUT',
+      body: JSON.stringify({ castSortOrder }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
 }
 
 export const actorApi = {
@@ -158,6 +166,12 @@ export const castApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
   delete: (id: string) => apiFetch<void>('/api/roles/' + id, { method: 'DELETE' }),
+  reorder: (mediaId: string, order: { id: string; billingOrder: number }[]) =>
+    apiFetch<{ updated: number }>('/api/media/' + mediaId + '/cast-reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
 }
 
 export const usersApi = {

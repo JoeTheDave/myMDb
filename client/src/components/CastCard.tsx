@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { User, X } from 'lucide-react'
+import { User, X, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CastMemberDetail } from '@/lib/types'
 import { RoleImageSlot } from '@/components/RoleImageSlot'
@@ -10,9 +10,11 @@ interface CastCardProps {
   isEditor: boolean
   onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement> | undefined
+  isDragging?: boolean | undefined
 }
 
-export function CastCard({ member, isEditor, onUpdate, onRemove }: CastCardProps) {
+export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps, isDragging }: CastCardProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -57,7 +59,26 @@ export function CastCard({ member, isEditor, onUpdate, onRemove }: CastCardProps
   }
 
   return (
-    <div className="relative group/card rounded-xl overflow-hidden bg-card border border-border">
+    <div className={cn(
+      'relative group/card rounded-xl overflow-hidden bg-card border border-border',
+      isDragging && 'opacity-80 shadow-2xl scale-105 ring-2 ring-gold/40',
+    )}>
+      {/* Drag handle — visible on card hover (EDITOR only, when dragHandleProps provided) */}
+      {isEditor && dragHandleProps && (
+        <div
+          {...dragHandleProps}
+          className={cn(
+            'absolute top-2 left-2 z-20',
+            'size-6 rounded flex items-center justify-center',
+            'opacity-0 group-hover/card:opacity-100 [@media(hover:none)]:opacity-100',
+            'transition-all duration-150',
+            'cursor-grab active:cursor-grabbing text-white/70 hover:text-white',
+          )}
+        >
+          <GripVertical className="size-4" />
+        </div>
+      )}
+
       {/* Remove button — visible on card hover (EDITOR only) */}
       {isEditor && (
         <button
@@ -67,7 +88,7 @@ export function CastCard({ member, isEditor, onUpdate, onRemove }: CastCardProps
             'absolute top-2 right-2 z-20',
             'size-6 rounded-full bg-destructive text-white',
             'flex items-center justify-center',
-            'opacity-0 group-hover/card:opacity-100',
+            'opacity-0 group-hover/card:opacity-100 [@media(hover:none)]:opacity-100',
             'transition-all duration-150',
             'hover:scale-125 hover:brightness-110',
           )}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { Clipboard, X, Loader2 } from 'lucide-react'
 import { uploadApi } from '@/lib/api'
@@ -40,12 +40,33 @@ interface ImageUploaderProps {
 
 export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]', className = 'max-w-[160px]', hideLabel = false }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setUploading(true)
+    try {
+      const resized = await resizeIfNeeded(file)
+      const uploadFile = new File([resized], 'image.jpg', { type: 'image/jpeg' })
+      const { url } = await uploadApi.upload(uploadFile)
+      onChange(url)
+    } catch {
+      toast.error('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function handlePaste() {
-    if (typeof navigator.clipboard === 'undefined') {
-      toast.error('Clipboard paste is not supported in this browser')
+    const canUseClipboard = typeof navigator.clipboard?.read === 'function'
+
+    if (!canUseClipboard) {
+      fileInputRef.current?.click()
       return
     }
+
     try {
       const items = await navigator.clipboard.read()
       const imageItem = items.find(item => item.types.some(t => t.startsWith('image/')))
@@ -78,6 +99,14 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]',
   return (
     <div className={hideLabel ? '' : 'space-y-1'}>
       {!hideLabel && <p className="text-xs font-medium text-foreground leading-none select-none">{label}</p>}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
 
       <div
         className={`relative ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
