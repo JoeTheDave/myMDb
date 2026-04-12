@@ -53,8 +53,13 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
-      const body = (await res.json()) as { message?: string; error?: string }
-      message = body.message ?? body.error ?? message
+      const body = (await res.json()) as { message?: unknown; error?: unknown }
+      const raw = body.message ?? body.error
+      if (typeof raw === 'string') {
+        message = raw
+      } else if (raw != null) {
+        message = JSON.stringify(raw)
+      }
     } catch {
       // ignore parse errors
     }
@@ -100,13 +105,24 @@ export const mediaApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
   delete: (id: string) => apiFetch<void>('/api/media/' + id, { method: 'DELETE' }),
-  rate: (id: string, stars: number) =>
-    apiFetch<void>('/api/media/' + id + '/ratings', {
-      method: 'PUT',
-      body: JSON.stringify({ stars }),
+  fetchRatings: (id: string) =>
+    apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/fetch-ratings', { method: 'PATCH' }),
+  importCast: (id: string, imdbId: string) =>
+    apiFetch<{ imported: number; matched: number; created: number; skipped: number }>('/api/media/' + id + '/cast/import', {
+      method: 'POST',
+      body: JSON.stringify({ imdbId }),
       headers: { 'Content-Type': 'application/json' },
     }),
-  deleteRating: (id: string) => apiFetch<void>('/api/media/' + id + '/ratings', { method: 'DELETE' }),
+  updateAmazonPrimeUrl: (id: string, amazonPrimeUrl: string | null) =>
+    apiFetch<{ amazonPrimeUrl: string | null }>('/api/media/' + id + '/amazon-prime-url', {
+      method: 'PATCH',
+      body: JSON.stringify({ amazonPrimeUrl }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  lookupAmazonPrime: (id: string) =>
+    apiFetch<{ amazonPrimeUrl: string | null }>('/api/media/' + id + '/amazon-lookup', { method: 'POST' }),
+  lookupTrailer: (id: string) =>
+    apiFetch<{ trailerUrl: string | null }>('/api/media/' + id + '/trailer-lookup', { method: 'POST' }),
 }
 
 export const actorApi = {

@@ -32,9 +32,8 @@ export interface MediaListItem {
   mediaType: MediaType
   contentRating?: ContentRating
   releaseYear?: number
-  communityAvg: number | null
-  communityCount: number
-  userRating?: number | null
+  criticRating: number | null
+  audienceRating: number | null
 }
 
 export interface MediaListResponse {
@@ -46,7 +45,7 @@ export interface MediaListResponse {
 
 export interface CastMemberDetail {
   id: string
-  characterName: string
+  characterName: string | null
   roleImageUrl?: string
   actor: {
     id: string
@@ -63,9 +62,10 @@ export interface MediaDetail {
   contentRating?: ContentRating
   releaseYear?: number
   cast: CastMemberDetail[]
-  communityAvg: number | null
-  communityCount: number
-  userRating?: number | null
+  criticRating: number | null
+  audienceRating: number | null
+  amazonPrimeUrl: string | null
+  trailerUrl: string | null
 }
 
 export interface ActorListItem {
@@ -84,12 +84,13 @@ export interface ActorListResponse {
 }
 
 export interface ActorFilmographyItem {
+  castRoleId: string
   id: string
   title: string
   imageUrl?: string
   mediaType: MediaType
   releaseYear?: number
-  characterName: string
+  characterName: string | null
   roleImageUrl?: string
 }
 
@@ -150,7 +151,7 @@ export interface ActorFormData {
 
 export interface CastRoleFormData {
   actorId: string
-  characterName: string
+  characterName?: string | undefined
   roleImageUrl?: string | undefined
 }
 

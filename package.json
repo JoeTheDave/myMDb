@@ -1,9 +1,10 @@
 {
   "name": "mymdb",
-  "version": "1.1.0",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "kill-ports": "{ lsof -ti :3001 & lsof -ti :5173; } | xargs kill -9 2>/dev/null; true",
+    "dev": "npm run kill-ports && bash -c 'trap \"kill 0\" SIGINT SIGTERM EXIT; npm run dev --prefix server & npm run dev --prefix client & wait'",
     "install:all": "npm install --prefix server && npm install --prefix client"
   },
   "devDependencies": {

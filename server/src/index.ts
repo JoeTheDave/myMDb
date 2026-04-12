@@ -13,7 +13,6 @@ import mediaRouter from './routes/media'
 import actorsRouter from './routes/actors'
 import mediaRolesRouter from './routes/roles'
 import { rolesRouter } from './routes/roles'
-import ratingsRouter from './routes/ratings'
 import uploadRouter from './routes/upload'
 
 const app = express()
@@ -24,7 +23,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'img-src': ["'self'", 'data:', '*.amazonaws.com'],
+        'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com'],
       },
     },
   }),
@@ -52,7 +51,6 @@ app.use('/api/auth', authRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/media', mediaRouter)
 app.use('/api/media/:id/roles', mediaRolesRouter)
-app.use('/api/media/:id/ratings', ratingsRouter)
 app.use('/api/actors', actorsRouter)
 app.use('/api/roles', rolesRouter)
 app.use('/api/upload', uploadRouter)

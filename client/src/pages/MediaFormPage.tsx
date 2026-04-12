@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectItem } from '@/components/ui/select'
 import { ImageUploader } from '@/components/ImageUploader'
 
 // Actor search autocomplete
@@ -42,7 +42,7 @@ function ActorSearch({ onSelect }: { onSelect: (actor: ActorListItem) => void })
             <button
               key={actor.id}
               type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2 transition-colors"
               onMouseDown={() => {
                 onSelect(actor)
                 setQ('')
@@ -143,7 +143,6 @@ export function MediaFormPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
-    // Strip contentRating if it doesn't match current type
     const validRatings = ratingOptions as readonly ContentRating[]
     const contentRating =
       form.contentRating && validRatings.includes(form.contentRating) ? form.contentRating : undefined
@@ -189,38 +188,38 @@ export function MediaFormPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6">{isEdit ? 'Edit' : 'Add'} Movie/Show</h1>
-
       <form onSubmit={handleSubmit}>
-        {/* Title */}
-        <div className="space-y-1.5">
-          <Label htmlFor="title">Title</Label>
-          <Input
-            id="title"
-            value={form.title}
-            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="Enter title..."
-            className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
-          />
-          {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
-        </div>
+        <div className="flex gap-8">
+          {/* Left column: all form fields + actions */}
+          <div className="flex-1 min-w-0 space-y-5">
+            <h1 className="text-2xl font-bold">
+              {isEdit ? 'Edit' : 'Add'} {form.mediaType === 'MOVIE' ? 'Movie' : 'Show'}
+            </h1>
 
-        {/* Two-column section */}
-        <div className="grid grid-cols-2 gap-8 mt-6">
-          {/* Left column: Type + Poster */}
-          <div className="space-y-4">
+            {/* Title */}
+            <div className="space-y-0.5">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
+              />
+              {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
+            </div>
+
             {/* Type */}
-            <div className="space-y-1.5">
+            <div className="space-y-0.5">
               <Label>Type</Label>
               <div className="flex gap-2">
                 {(['MOVIE', 'SHOW'] as const).map(t => (
                   <Button
                     key={t}
                     type="button"
-                    variant={form.mediaType === t ? 'default' : 'outline'}
+                    variant="outline"
                     size="sm"
                     onClick={() => handleTypeChange(t)}
-                    className={form.mediaType === t ? 'bg-gold text-black hover:bg-gold/90' : ''}
+                    className={form.mediaType === t ? 'bg-gold text-black border-gold hover:bg-gold/90' : ''}
                   >
                     {t === 'MOVIE' ? 'Movie' : 'Show'}
                   </Button>
@@ -228,35 +227,14 @@ export function MediaFormPage() {
               </div>
             </div>
 
-            {/* Poster */}
-            <ImageUploader
-              label="Poster Image"
-              value={form.imageUrl}
-              onChange={url => {
-                setForm(f => {
-                  const next: MediaFormData = { ...f }
-                  if (url) {
-                    next.imageUrl = url
-                  } else {
-                    delete next.imageUrl
-                  }
-                  return next
-                })
-              }}
-            />
-          </div>
-
-          {/* Right column: Release Date + Content Rating */}
-          <div className="space-y-4">
             {/* Release year */}
-            <div className="space-y-1.5">
+            <div className="space-y-0.5">
               <Label htmlFor="releaseYear">Release Year</Label>
               <Input
                 id="releaseYear"
                 type="number"
                 min={1888}
                 max={2100}
-                placeholder="e.g. 2024"
                 value={form.releaseYear ?? ''}
                 onChange={e => {
                   const val = e.target.value
@@ -274,7 +252,7 @@ export function MediaFormPage() {
             </div>
 
             {/* Content rating */}
-            <div className="space-y-1.5">
+            <div className="space-y-0.5">
               <Label>Content Rating</Label>
               <Select
                 key={form.mediaType}
@@ -290,41 +268,59 @@ export function MediaFormPage() {
                     return next
                   })
                 }}
+                placeholder="Select rating…"
+                className="w-48"
               >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select rating..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover" alignItemWithTrigger={false}>
-                  {ratingOptions.map(r => (
-                    <SelectItem key={r} value={r}>
-                      {formatContentRating(r)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                {ratingOptions.map(r => (
+                  <SelectItem key={r} value={r}>
+                    {formatContentRating(r)}
+                  </SelectItem>
+                ))}
               </Select>
             </div>
-          </div>
-        </div>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-3 mt-6">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={saveMutation.isPending}
-            className="bg-gold text-black hover:bg-gold/90 font-semibold"
-          >
-            {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Create'}
-          </Button>
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saveMutation.isPending}
+                className="bg-gold text-black hover:bg-gold/90 font-semibold"
+              >
+                {saveMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                {isEdit ? 'Save Changes' : 'Create'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Right column: Poster image */}
+          <div className="w-72 shrink-0">
+            <ImageUploader
+              label="Poster"
+              aspect="aspect-[2/3]"
+              className="w-full"
+              value={form.imageUrl}
+              onChange={url => {
+                setForm(f => {
+                  const next: MediaFormData = { ...f }
+                  if (url) {
+                    next.imageUrl = url
+                  } else {
+                    delete next.imageUrl
+                  }
+                  return next
+                })
+              }}
+            />
+          </div>
         </div>
       </form>
 
       {/* Cast section (edit mode only) */}
       {isEdit && existing && (
-        <section className="mt-10 border-t pt-8">
+        <section className="mt-10 border-t border-border pt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Cast</h2>
             <Button variant="outline" size="sm" onClick={() => setAddingCast(!addingCast)}>
@@ -336,7 +332,7 @@ export function MediaFormPage() {
           {/* Add cast form */}
           {addingCast && (
             <div className="rounded-lg border border-border bg-card p-4 mb-4 space-y-3">
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label>Actor</Label>
                 <ActorSearch onSelect={actor => setCastForm(f => ({ ...f, actor }))} />
                 {castForm.actor && (
@@ -348,7 +344,7 @@ export function MediaFormPage() {
                   </div>
                 )}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label>Character Name</Label>
                 <Input
                   placeholder="Character name..."
@@ -404,7 +400,7 @@ export function MediaFormPage() {
                     {(member.roleImageUrl ?? member.actor.imageUrl) && (
                       <img
                         src={member.roleImageUrl ?? member.actor.imageUrl}
-                        alt={member.characterName}
+                        alt={member.characterName ?? ''}
                         className="w-full h-full object-cover"
                       />
                     )}

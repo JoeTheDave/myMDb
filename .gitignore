@@ -42,3 +42,6 @@ prisma/migrations/
 
 # Tool artifacts
 .playwright-mcp/
+
+# Feature specs
+.specs/

@@ -9,7 +9,7 @@ import { logger } from '../lib/logger'
 const router = Router({ mergeParams: true })
 
 const createRoleSchema = z.object({
-  characterName: z.string().min(1),
+  characterName: z.string().min(1).optional(),
   actorId: z.string().min(1),
   roleImageUrl: z.string().url().optional(),
 })
@@ -50,7 +50,7 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request<{ id: st
 
     const role = await prisma.castRole.create({
       data: {
-        characterName,
+        characterName: characterName ?? null,
         actorId,
         mediaId,
         roleImageUrl: roleImageUrl ?? null,

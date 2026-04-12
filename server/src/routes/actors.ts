@@ -21,8 +21,8 @@ const listQuerySchema = z.object({
 const createActorSchema = z.object({
   name: z.string().min(1),
   imageUrl: z.string().url().optional(),
-  birthday: z.string().datetime({ offset: true }).optional(),
-  deathDay: z.string().datetime({ offset: true }).optional(),
+  birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  deathDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 const updateActorSchema = createActorSchema.partial()
@@ -147,7 +147,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       imageUrl: actor.imageUrl,
       birthday: actor.birthday,
       deathDay: actor.deathDay,
-      filmography: actor.castRoles.map((role: { id: string; characterName: string; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
+      filmography: actor.castRoles.map((role: { id: string; characterName: string | null; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
+        castRoleId: role.id,
         id: role.media.id,
         title: role.media.title,
         imageUrl: role.media.imageUrl,

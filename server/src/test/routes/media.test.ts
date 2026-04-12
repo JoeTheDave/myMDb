@@ -73,8 +73,8 @@ describe('GET /api/media/:id', () => {
     expect(res.body.id).toBe(media.id)
     expect(res.body.title).toBe('Interstellar')
     expect(Array.isArray(res.body.cast)).toBe(true)
-    expect(typeof res.body.communityCount).toBe('number')
-    expect(res.body.communityAvg === null || typeof res.body.communityAvg === 'number').toBe(true)
+    expect(res.body.criticRating === null || typeof res.body.criticRating === 'number').toBe(true)
+    expect(res.body.audienceRating === null || typeof res.body.audienceRating === 'number').toBe(true)
   })
 })
 
