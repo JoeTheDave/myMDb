@@ -25,6 +25,7 @@ app.use(
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com'],
+        'frame-src': ["'self'", 'https://www.youtube.com'],
       },
     },
   }),
