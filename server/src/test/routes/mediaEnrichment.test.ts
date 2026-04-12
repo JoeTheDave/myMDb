@@ -9,6 +9,15 @@ vi.mock('axios')
 import axios from 'axios'
 const mockAxiosGet = vi.mocked(axios.get)
 
+// Mock S3 uploadBufferToS3 to avoid hitting AWS in tests
+vi.mock('../../lib/s3', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/s3')>()
+  return {
+    ...actual,
+    uploadBufferToS3: vi.fn().mockResolvedValue('https://mock-bucket.s3.us-east-1.amazonaws.com/imports/mock-uuid-actor-profile.jpg'),
+  }
+})
+
 const databaseUrl = process.env['DATABASE_URL']
 const prisma = new PrismaClient(
   databaseUrl !== undefined ? { datasources: { db: { url: databaseUrl } } } : undefined,
@@ -24,9 +33,20 @@ function makeTmdbFindEmptyResponse() {
   return { data: { movie_results: [], tv_results: [] } }
 }
 
-// TMDb /credits response with cast
-function makeTmdbCreditsResponse(cast: Array<{ name: string; character: string }>) {
-  return { data: { cast } }
+// TMDb /credits response with cast (includes TMDb person id and profile_path)
+function makeTmdbCreditsResponse(
+  cast: Array<{ id?: number; name: string; character: string; profile_path?: string | null }>,
+) {
+  return {
+    data: {
+      cast: cast.map((m, i) => ({
+        id: m.id ?? 1000 + i,
+        name: m.name,
+        character: m.character,
+        profile_path: m.profile_path ?? null,
+      })),
+    },
+  }
 }
 
 // TMDb /credits response with empty cast
@@ -34,18 +54,30 @@ function makeTmdbCreditsEmptyResponse() {
   return { data: { cast: [] } }
 }
 
-// Minimal Amazon search page HTML with an ASIN in a /gp/video/detail/ URL
-function makeAmazonHtml(asin: string) {
-  return `<html><body><a href="/gp/video/detail/${asin}/">Watch on Prime Video</a></body></html>`
+// TMDb /person response
+function makeTmdbPersonResponse(birthday: string | null, deathday: string | null) {
+  return { data: { birthday, deathday } }
 }
 
-// Minimal YouTube search results page with embedded videoId JSON
-function makeYoutubeHtml(videoId: string) {
-  return `<html><body><script>var data = {"videoId":"${videoId}","title":"Trailer"};</script></body></html>`
+// Fake image arraybuffer response
+function makeImageResponse() {
+  return { data: Buffer.from('fake-image-data'), headers: { 'content-type': 'image/jpeg' } }
 }
 
-// HTML with no useful data
-const EMPTY_HTML = '<html><body><p>No results.</p></body></html>'
+// TMDb /videos response
+function makeTmdbVideosResponse(videos: Array<{ site: string; type: string; key: string }>) {
+  return { data: { results: videos } }
+}
+
+// TMDb /watch/providers response
+function makeTmdbProvidersResponse(usRegion: { link?: string; flatrate?: unknown[]; rent?: unknown[]; buy?: unknown[] } | null) {
+  return { data: { results: usRegion ? { US: usRegion } : {} } }
+}
+
+// TMDb /search/movie response
+function makeTmdbSearchMovieResponse(tmdbId: number) {
+  return { data: { results: [{ id: tmdbId }] } }
+}
 
 describe('POST /api/media/:id/cast/import', () => {
   beforeEach(() => {
@@ -166,9 +198,12 @@ describe('POST /api/media/:id/cast/import', () => {
     mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
     // Call 2: /credits → cast with character names
     mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
-      { name: 'Jane Smith', character: 'Hero' },
-      { name: 'Bob Jones', character: 'Villain' },
+      { id: 1001, name: 'Jane Smith', character: 'Hero', profile_path: null },
+      { id: 1002, name: 'Bob Jones', character: 'Villain', profile_path: null },
     ]))
+    // Enrichment calls for each new actor (person endpoint — no profile_path so no image download)
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse('1980-01-01', null))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse('1975-06-15', null))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -184,14 +219,129 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.created).toBe(2)
   })
 
+  it('enriches newly created actors with birthday, deathday, and profile image', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'The Matrix' })
+
+    // Call 1: /find → tmdbId
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(603))
+    // Call 2: /credits → cast with profile_path
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { id: 6384, name: 'Keanu Reeves', character: 'Neo', profile_path: '/43hoCX4R9rZmoh5rnDF9OI6NVez.jpg' },
+    ]))
+    // Enrichment: person details
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse('1964-09-02', null))
+    // Enrichment: image download
+    mockAxiosGet.mockResolvedValueOnce(makeImageResponse())
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt0133093' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.created).toBe(1)
+
+    const actor = await prisma.actor.findFirst({ where: { name: 'Keanu Reeves' } })
+    expect(actor).not.toBeNull()
+    expect(actor?.birthday).not.toBeNull()
+    expect(actor?.deathDay).toBeNull()
+    expect(actor?.imageUrl).toContain('amazonaws.com')
+  })
+
+  it('enriches actor with deathday when TMDb person has a death date', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'The Matrix' })
+
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(603))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { id: 9999, name: 'Gloria Foster', character: 'Oracle', profile_path: null },
+    ]))
+    // Enrichment: person with death date
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse('1933-11-15', '2001-09-02'))
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt0133093' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.created).toBe(1)
+
+    const actor = await prisma.actor.findFirst({ where: { name: 'Gloria Foster' } })
+    expect(actor?.deathDay).not.toBeNull()
+  })
+
+  it('creates actor successfully even when TMDb person endpoint fails', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Some Movie' })
+
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { id: 5555, name: 'Unknown Actor', character: 'Sidekick', profile_path: null },
+    ]))
+    // Person endpoint fails
+    mockAxiosGet.mockRejectedValueOnce(new Error('TMDb person API error'))
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt5555555' })
+
+    expect(res.status).toBe(200)
+    // Actor is still created — enrichment failure must not increment skipped
+    expect(res.body.created).toBe(1)
+    expect(res.body.skipped).toBe(0)
+
+    const actor = await prisma.actor.findFirst({ where: { name: 'Unknown Actor' } })
+    expect(actor).not.toBeNull()
+    expect(actor?.birthday).toBeNull()
+    expect(actor?.imageUrl).toBeNull()
+  })
+
+  it('creates actor with null imageUrl when profile image download fails', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Another Movie' })
+
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(77777))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { id: 4444, name: 'Image Fail Actor', character: 'Lead', profile_path: '/some-path.jpg' },
+    ]))
+    // Person succeeds
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse('1990-03-20', null))
+    // Image download fails
+    mockAxiosGet.mockRejectedValueOnce(new Error('Image download error'))
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt7777777' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.created).toBe(1)
+    expect(res.body.skipped).toBe(0)
+
+    const actor = await prisma.actor.findFirst({ where: { name: 'Image Fail Actor' } })
+    expect(actor).not.toBeNull()
+    // birthday set from person data, imageUrl null
+    expect(actor?.birthday).not.toBeNull()
+    expect(actor?.imageUrl).toBeNull()
+  })
+
   it('sets characterName to null when TMDb character is empty string', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'No Char Film' })
     mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(99999))
     mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
-      { name: 'No Char Actor', character: '' },
+      { id: 3333, name: 'No Char Actor', character: '', profile_path: null },
     ]))
+    // Enrichment
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse(null, null))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -217,8 +367,9 @@ describe('POST /api/media/:id/cast/import', () => {
 
     mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
     mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
-      { name: 'Jane Smith', character: 'Hero' },
+      { id: 2222, name: 'Jane Smith', character: 'Hero', profile_path: null },
     ]))
+    // No enrichment calls for matched actors
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -246,7 +397,7 @@ describe('POST /api/media/:id/cast/import', () => {
 
     mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
     mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
-      { name: 'Jane Smith', character: 'Hero' },
+      { id: 2222, name: 'Jane Smith', character: 'Hero', profile_path: null },
     ]))
 
     const res = await request(app)
@@ -265,8 +416,10 @@ describe('POST /api/media/:id/cast/import', () => {
     const media = await createMedia()
     mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
     mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
-      { name: 'Unique Actor Name', character: 'The Lead' },
+      { id: 8888, name: 'Unique Actor Name', character: 'The Lead', profile_path: null },
     ]))
+    // Enrichment
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbPersonResponse(null, null))
 
     await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -312,10 +465,25 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 500 when Amazon search request fails', async () => {
+  it('returns 422 when TMDb search fails to find the title', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Unknown Film' })
+    // TMDb search returns no results
+    mockAxiosGet.mockResolvedValueOnce({ data: { results: [] } })
+    const res = await request(app)
+      .post(`/api/media/${media.id}/amazon-lookup`)
+      .set('Cookie', `token=${token}`)
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 500 when TMDb watch/providers request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
+    // TMDb search succeeds
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    // providers request fails
     mockAxiosGet.mockRejectedValueOnce(new Error('Network error'))
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -323,11 +491,12 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.status).toBe(500)
   })
 
-  it('returns amazonPrimeUrl: null and message when no Amazon link is found', async () => {
+  it('returns amazonPrimeUrl: null and message when not available in the US', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Obscure Film' })
-    mockAxiosGet.mockResolvedValueOnce({ data: EMPTY_HTML })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse(null))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -338,29 +507,53 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.body.message).toBeDefined()
   })
 
-  it('returns the found URL and saves it to the database on happy path for EDITOR', async () => {
+  it('returns amazonPrimeUrl: null when US region exists but has no streaming entries', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
-    const media = await createMedia({ title: 'Inception' })
-    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonHtml('B003EYVXV4') })
+    const media = await createMedia({ title: 'No Stream Film' })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    // US exists but no flatrate/rent/buy
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({ link: 'https://www.justwatch.com/us/movie/test' }))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.amazonPrimeUrl).toContain('amazon.com')
-    expect(res.body.amazonPrimeUrl).toContain('B003EYVXV4')
+    expect(res.body.amazonPrimeUrl).toBeNull()
+  })
+
+  it('returns the JustWatch URL and saves it on happy path for EDITOR', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Inception' })
+    const justWatchUrl = 'https://www.justwatch.com/us/movie/inception'
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(27205))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({
+      link: justWatchUrl,
+      flatrate: [{ provider_id: 9, provider_name: 'Amazon Prime Video' }],
+    }))
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/amazon-lookup`)
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.amazonPrimeUrl).toBe(justWatchUrl)
 
     const updated = await prisma.media.findUnique({ where: { id: media.id }, select: { amazonPrimeUrl: true } })
-    expect(updated?.amazonPrimeUrl).toContain('amazon.com')
+    expect(updated?.amazonPrimeUrl).toBe(justWatchUrl)
   })
 
   it('works for ADMIN role', async () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
     const media = await createMedia({ title: 'The Matrix' })
-    mockAxiosGet.mockResolvedValueOnce({ data: makeAmazonHtml('B001234567') })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(603))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({
+      link: 'https://www.justwatch.com/us/movie/the-matrix',
+      buy: [{ provider_id: 3, provider_name: 'Google Play Movies' }],
+    }))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -368,22 +561,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.amazonPrimeUrl).not.toBeNull()
-  })
-
-  it('constructs a clean URL without tracking params from the ASIN', async () => {
-    const editor = await createUser({ role: 'EDITOR' })
-    const token = makeToken(editor)
-    const media = await createMedia({ title: 'Dune' })
-    // The Amazon search page uses /gp/video/detail/ URLs for Prime Video streaming
-    const htmlWithPrimeLink = '<html><body><a href="/gp/video/detail/B001234567/">Watch on Prime Video</a></body></html>'
-    mockAxiosGet.mockResolvedValueOnce({ data: htmlWithPrimeLink })
-
-    const res = await request(app)
-      .post(`/api/media/${media.id}/amazon-lookup`)
-      .set('Cookie', `token=${token}`)
-
-    expect(res.status).toBe(200)
-    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/gp/video/detail/B001234567/')
+    expect(res.body.amazonPrimeUrl).toContain('justwatch.com')
   })
 })
 
@@ -544,10 +722,22 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 500 when YouTube search request fails', async () => {
+  it('returns 422 when TMDb search fails to find the title', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Unknown Film' })
+    mockAxiosGet.mockResolvedValueOnce({ data: { results: [] } })
+    const res = await request(app)
+      .post(`/api/media/${media.id}/trailer-lookup`)
+      .set('Cookie', `token=${token}`)
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 500 when TMDb videos request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
     mockAxiosGet.mockRejectedValueOnce(new Error('Network error'))
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -555,11 +745,16 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     expect(res.status).toBe(500)
   })
 
-  it('returns trailerUrl: null and message when no YouTube link is found', async () => {
+  it('returns trailerUrl: null and message when no YouTube Trailer found', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Obscure Film' })
-    mockAxiosGet.mockResolvedValueOnce({ data: EMPTY_HTML })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    // videos returns results but none are YouTube Trailers
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([
+      { site: 'YouTube', type: 'Teaser', key: 'abc123' },
+      { site: 'Vimeo', type: 'Trailer', key: 'xyz789' },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -570,30 +765,50 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     expect(res.body.message).toBeDefined()
   })
 
-  it('returns the found trailer URL and saves it to the database on happy path for EDITOR', async () => {
+  it('returns trailerUrl: null when TMDb returns empty results', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
-    const media = await createMedia({ title: 'Inception' })
-    const videoId = 'YoHD9XEInc0'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
+    const media = await createMedia({ title: 'No Trailer Film' })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoId}`)
+    expect(res.body.trailerUrl).toBeNull()
+  })
+
+  it('returns the found trailer URL and saves it to the database on happy path for EDITOR', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Inception' })
+    const videoKey = 'YoHD9XEInc0'
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(27205))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([
+      { site: 'YouTube', type: 'Trailer', key: videoKey },
+    ]))
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/trailer-lookup`)
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoKey}`)
 
     const updated = await prisma.media.findUnique({ where: { id: media.id }, select: { trailerUrl: true } })
-    expect(updated?.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoId}`)
+    expect(updated?.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoKey}`)
   })
 
   it('works for ADMIN role', async () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
     const media = await createMedia({ title: 'The Dark Knight' })
-    const videoId = 'EXeTwQWrcwY'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(155))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([
+      { site: 'YouTube', type: 'Trailer', key: 'EXeTwQWrcwY' },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -607,8 +822,11 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
-    const videoId = 'ABC1234DEF5'
-    mockAxiosGet.mockResolvedValueOnce({ data: makeYoutubeHtml(videoId) })
+    const videoKey = 'ABC1234DEF5'
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([
+      { site: 'YouTube', type: 'Trailer', key: videoKey },
+    ]))
 
     await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
@@ -618,23 +836,26 @@ describe('POST /api/media/:id/trailer-lookup', () => {
       where: { id: media.id },
       select: { trailerUrl: true },
     })
-    expect(updated?.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoId}`)
+    expect(updated?.trailerUrl).toBe(`https://www.youtube.com/watch?v=${videoKey}`)
   })
 
-  it('extracts the first videoId from embedded JSON in the YouTube search page', async () => {
+  it('takes the first YouTube Trailer when multiple results exist', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Multi Result Film' })
-    const firstVideoId = 'dQw4w9WgXcQ'
-    const secondVideoId = 'oHg5SJYRHA0'
-    const multiHtml = `<html><body><script>{"videoId":"${firstVideoId}"},{"videoId":"${secondVideoId}"}</script></body></html>`
-    mockAxiosGet.mockResolvedValueOnce({ data: multiHtml })
+    const firstKey = 'dQw4w9WgXcQ'
+    const secondKey = 'oHg5SJYRHA0'
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(99999))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbVideosResponse([
+      { site: 'YouTube', type: 'Trailer', key: firstKey },
+      { site: 'YouTube', type: 'Trailer', key: secondKey },
+    ]))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/trailer-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${firstVideoId}`)
+    expect(res.body.trailerUrl).toBe(`https://www.youtube.com/watch?v=${firstKey}`)
   })
 })

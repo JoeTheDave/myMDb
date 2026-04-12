@@ -4,15 +4,9 @@ import axios from 'axios'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
-import { deleteS3Object } from '../lib/s3'
+import { deleteS3Object, uploadBufferToS3 } from '../lib/s3'
 import { logger } from '../lib/logger'
 import { fetchRTRatings, RTNotFoundError } from '../lib/rtScraper'
-
-const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-}
 
 const router = Router()
 
@@ -54,6 +48,85 @@ function isS3Url(url: string | null | undefined): boolean {
   return !!url && url.includes('.s3.') && url.includes('amazonaws.com')
 }
 
+type MediaType = 'MOVIE' | 'SHOW'
+
+async function getTmdbId(media: {
+  title: string
+  releaseYear: number | null
+  mediaType: MediaType
+  imdbId?: string | null
+}): Promise<number> {
+  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+  const headers = { Authorization: `Bearer ${tmdbToken}` }
+
+  if (media.imdbId) {
+    const findResponse = await axios.get(`https://api.themoviedb.org/3/find/${media.imdbId}`, {
+      params: { external_source: 'imdb_id' },
+      headers,
+      timeout: 15000,
+    })
+    type FindData = { movie_results?: Array<{ id: number }>; tv_results?: Array<{ id: number }> }
+    const findData = findResponse.data as FindData
+    const result = media.mediaType === 'SHOW' ? findData.tv_results?.[0] : findData.movie_results?.[0]
+    if (result) return result.id
+  }
+
+  // Fall back to title + year search
+  const endpoint = media.mediaType === 'SHOW'
+    ? 'https://api.themoviedb.org/3/search/tv'
+    : 'https://api.themoviedb.org/3/search/movie'
+  const params: Record<string, string | number> = { query: media.title, page: 1 }
+  if (media.releaseYear) params['year'] = media.releaseYear
+  const searchResponse = await axios.get(endpoint, { params, headers, timeout: 15000 })
+  type SearchData = { results?: Array<{ id: number }> }
+  const searchData = searchResponse.data as SearchData
+  const first = searchData.results?.[0]
+  if (!first) throw new Error(`No TMDb result for title: ${media.title}`)
+  return first.id
+}
+
+async function enrichNewActor(
+  tmdbPersonId: number,
+  profilePath: string | null,
+): Promise<{ birthday: Date | null; deathDay: Date | null; imageUrl: string | null }> {
+  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+  const headers = { Authorization: `Bearer ${tmdbToken}` }
+
+  let birthday: Date | null = null
+  let deathDay: Date | null = null
+  let imageUrl: string | null = null
+
+  try {
+    const personResponse = await axios.get(
+      `https://api.themoviedb.org/3/person/${tmdbPersonId}`,
+      { headers, timeout: 15000 },
+    )
+    type PersonData = { birthday?: string | null; deathday?: string | null }
+    const personData = personResponse.data as PersonData
+    if (personData.birthday) birthday = new Date(personData.birthday)
+    if (personData.deathday) deathDay = new Date(personData.deathday)
+  } catch (err) {
+    logger.warn({ logId: 'pale-fetching-person', err, tmdbPersonId }, 'Failed to fetch TMDb person details')
+  }
+
+  if (profilePath) {
+    try {
+      const imgResponse = await axios.get(`https://image.tmdb.org/t/p/w500${profilePath}`, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+      })
+      imageUrl = await uploadBufferToS3(
+        Buffer.from(imgResponse.data as ArrayBuffer),
+        'image/jpeg',
+        'actor-profile.jpg',
+      )
+    } catch (err) {
+      logger.warn({ logId: 'soft-uploading-face', err, tmdbPersonId }, 'Failed to download/upload actor profile image')
+    }
+  }
+
+  return { birthday, deathDay, imageUrl }
+}
 
 // GET /api/media
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
@@ -419,28 +492,15 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
-  const tmdbAuthHeader = { Authorization: `Bearer ${tmdbToken}` }
-
   // Step 1: Map IMDB ID → TMDb ID via /find endpoint
   let tmdbId: number
   try {
-    const findResponse = await axios.get(`https://api.themoviedb.org/3/find/${imdbId}`, {
-      params: { external_source: 'imdb_id' },
-      headers: tmdbAuthHeader,
-      timeout: 15000,
+    tmdbId = await getTmdbId({
+      title: '',
+      releaseYear: null,
+      mediaType: media.mediaType as MediaType,
+      imdbId,
     })
-    type FindData = { movie_results?: Array<{ id: number }>; tv_results?: Array<{ id: number }> }
-    const findData = findResponse.data as FindData
-    const tmdbResult = media.mediaType === 'SHOW'
-      ? findData.tv_results?.[0]
-      : findData.movie_results?.[0]
-    if (!tmdbResult) {
-      logger.warn({ logId: 'pale-missing-tmdb', imdbId }, 'No TMDb entry found for IMDB ID')
-      res.status(422).json({ error: 'Title not found on TMDb. Verify the IMDB ID.' })
-      return
-    }
-    tmdbId = tmdbResult.id
   } catch (err) {
     logger.error({ logId: 'faint-pulling-tmdb', err, imdbId }, 'Failed to query TMDb /find for IMDB ID')
     res.status(422).json({ error: 'Title not found on TMDb. Verify the IMDB ID.' })
@@ -448,26 +508,29 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
   }
 
   // Step 2: Fetch cast from TMDb credits endpoint
-  type TmdbCastMember = { name: string; character: string }
-  let castEntries: Array<{ actorName: string; character: string }>
+  type TmdbCastMember = { id: number; name: string; character: string; profile_path: string | null }
+  let castEntries: Array<{ tmdbPersonId: number; actorName: string; character: string; profilePath: string | null }>
   try {
     const creditsEndpoint = media.mediaType === 'SHOW'
       ? `https://api.themoviedb.org/3/tv/${tmdbId}/credits`
       : `https://api.themoviedb.org/3/movie/${tmdbId}/credits`
+    const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
     const creditsResponse = await axios.get(creditsEndpoint, {
-      headers: tmdbAuthHeader,
+      headers: { Authorization: `Bearer ${tmdbToken}` },
       timeout: 15000,
     })
     const creditsData = creditsResponse.data as { cast?: TmdbCastMember[] }
-    const cast = creditsData.cast ?? []
-    if (cast.length === 0) {
+    const rawCast = creditsData.cast ?? []
+    if (rawCast.length === 0) {
       logger.warn({ logId: 'pale-missing-credits', imdbId, tmdbId }, 'No cast data returned from TMDb credits')
       res.status(422).json({ error: 'No cast data found on TMDb for this title.' })
       return
     }
-    castEntries = cast.map((member) => ({
+    castEntries = rawCast.map((member) => ({
+      tmdbPersonId: member.id,
       actorName: member.name,
       character: member.character,
+      profilePath: member.profile_path,
     }))
   } catch (err) {
     logger.error({ logId: 'blunt-breaking-credits', err, tmdbId }, 'Failed to fetch TMDb credits')
@@ -505,36 +568,69 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
   const actorByName = new Map(existingActors.map(a => [a.name.toLowerCase(), a]))
   const castRoleActorIds = new Set(existingCastRoleActorIds.map(r => r.actorId))
 
+  // Collect new actors to enrich
+  const newActorEntries: Array<{ index: number; tmdbPersonId: number; actorName: string; character: string; profilePath: string | null }> = []
+  const matchedEntries: Array<{ index: number; actorName: string; character: string; existingActorId: string }> = []
+
   for (let i = 0; i < castEntries.length; i++) {
     const entry = castEntries[i]
     if (!entry) continue
-    const { actorName, character } = entry
-    try {
-      const existingActor = actorByName.get(actorName.toLowerCase())
+    const existingActor = actorByName.get(entry.actorName.toLowerCase())
+    if (existingActor) {
+      matchedEntries.push({ index: i, actorName: entry.actorName, character: entry.character, existingActorId: existingActor.id })
+    } else {
+      newActorEntries.push({ index: i, tmdbPersonId: entry.tmdbPersonId, actorName: entry.actorName, character: entry.character, profilePath: entry.profilePath })
+    }
+  }
 
-      if (existingActor) {
-        matched++
-        if (castRoleActorIds.has(existingActor.id)) {
-          skipped++
-          continue
-        }
-        await prisma.castRole.create({
-          data: { mediaId: id, actorId: existingActor.id, characterName: character || null, billingOrder: i },
-        })
-        castRoleActorIds.add(existingActor.id)
-        imported++
-      } else {
-        created++
-        const newActor = await prisma.actor.create({ data: { name: actorName } })
-        actorByName.set(actorName.toLowerCase(), newActor)
-        await prisma.castRole.create({
-          data: { mediaId: id, actorId: newActor.id, characterName: character || null, billingOrder: i },
-        })
-        castRoleActorIds.add(newActor.id)
-        imported++
+  // Enrich all new actors concurrently (best-effort — never increments skipped on failure)
+  const enrichmentResults = await Promise.allSettled(
+    newActorEntries.map(e => enrichNewActor(e.tmdbPersonId, e.profilePath))
+  )
+
+  // Process matched actors
+  for (const entry of matchedEntries) {
+    try {
+      matched++
+      if (castRoleActorIds.has(entry.existingActorId)) {
+        skipped++
+        continue
       }
+      await prisma.castRole.create({
+        data: { mediaId: id, actorId: entry.existingActorId, characterName: entry.character || null, billingOrder: entry.index },
+      })
+      castRoleActorIds.add(entry.existingActorId)
+      imported++
     } catch (err) {
-      logger.error({ logId: 'dull-skipping-cast', err, actorName }, 'Failed to import cast member')
+      logger.error({ logId: 'dull-skipping-cast', err, actorName: entry.actorName }, 'Failed to import cast member')
+      skipped++
+    }
+  }
+
+  // Process new actors (with enrichment data)
+  for (let i = 0; i < newActorEntries.length; i++) {
+    const entry = newActorEntries[i]
+    if (!entry) continue
+    const enrichment = enrichmentResults[i]
+    const enrichData = enrichment?.status === 'fulfilled' ? enrichment.value : { birthday: null, deathDay: null, imageUrl: null }
+    try {
+      created++
+      const newActor = await prisma.actor.create({
+        data: {
+          name: entry.actorName,
+          birthday: enrichData.birthday,
+          deathDay: enrichData.deathDay,
+          imageUrl: enrichData.imageUrl,
+        },
+      })
+      actorByName.set(entry.actorName.toLowerCase(), newActor)
+      await prisma.castRole.create({
+        data: { mediaId: id, actorId: newActor.id, characterName: entry.character || null, billingOrder: entry.index },
+      })
+      castRoleActorIds.add(newActor.id)
+      imported++
+    } catch (err) {
+      logger.error({ logId: 'dull-skipping-cast', err, actorName: entry.actorName }, 'Failed to import cast member')
       skipped++
     }
   }
@@ -547,11 +643,11 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
 router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
 
-  let media: { id: string; title: string; releaseYear: number | null } | null
+  let media: { id: string; title: string; releaseYear: number | null; mediaType: string } | null
   try {
     media = await prisma.media.findUnique({
       where: { id },
-      select: { id: true, title: true, releaseYear: true },
+      select: { id: true, title: true, releaseYear: true, mediaType: true },
     })
   } catch (err) {
     logger.error({ logId: 'grim-seeking-prime', err, mediaId: id }, 'Failed to fetch media for Amazon lookup')
@@ -563,31 +659,40 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     return
   }
 
-  const query = encodeURIComponent(`${media.title} ${media.releaseYear ?? ''}`.trim())
-
-  let html: string
+  let tmdbId: number
   try {
-    const response = await axios.get(`https://www.amazon.com/s?k=${query}&i=instant-video&rh=n%3A2858905011`, {
-      headers: BROWSER_HEADERS,
+    tmdbId = await getTmdbId({ title: media.title, releaseYear: media.releaseYear, mediaType: media.mediaType as MediaType })
+  } catch (err) {
+    logger.error({ logId: 'grey-seeking-tmdb-prime', err, mediaId: id }, 'Failed to get TMDb ID for Amazon lookup')
+    res.status(422).json({ error: 'Title not found on TMDb.' })
+    return
+  }
+
+  let amazonPrimeUrl: string | null = null
+  try {
+    const endpoint = media.mediaType === 'SHOW'
+      ? `https://api.themoviedb.org/3/tv/${tmdbId}/watch/providers`
+      : `https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers`
+    const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+    const providersResponse = await axios.get(endpoint, {
+      headers: { Authorization: `Bearer ${tmdbToken}` },
       timeout: 15000,
     })
-    html = response.data as string
+    type ProvidersData = { results?: { US?: { link?: string; flatrate?: unknown[]; rent?: unknown[]; buy?: unknown[] } } }
+    const providersData = providersResponse.data as ProvidersData
+    const usRegion = providersData.results?.US
+    if (usRegion && (usRegion.flatrate?.length || usRegion.rent?.length || usRegion.buy?.length)) {
+      amazonPrimeUrl = usRegion.link ?? null
+    }
   } catch (err) {
-    logger.error({ logId: 'grey-searching-prime', err, mediaId: id }, 'Failed to fetch Amazon search results for Amazon lookup')
+    logger.error({ logId: 'blunt-searching-prime', err, mediaId: id }, 'Failed to fetch TMDb watch providers for Amazon lookup')
     res.status(500).json({ error: 'Internal server error' })
     return
   }
 
-  const asinMatch = html.match(/\/gp\/video\/detail\/([A-Z0-9]{10})/)
-  let amazonPrimeUrl: string | null = null
-
-  if (asinMatch?.[1]) {
-    amazonPrimeUrl = `https://www.amazon.com/gp/video/detail/${asinMatch[1]}/`
-  }
-
   if (!amazonPrimeUrl) {
-    logger.info({ logId: 'calm-missing-prime', mediaId: id }, 'No Amazon Prime link found')
-    res.json({ amazonPrimeUrl: null, message: 'No Amazon Prime link found.' })
+    logger.info({ logId: 'calm-missing-prime', mediaId: id }, 'Not found on streaming services in the US')
+    res.json({ amazonPrimeUrl: null, message: 'Not found on streaming services in the US.' })
     return
   }
 
@@ -638,11 +743,11 @@ router.patch('/:id/amazon-prime-url', authenticate, authorize('EDITOR'), async (
 router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
 
-  let media: { id: string; title: string; releaseYear: number | null } | null
+  let media: { id: string; title: string; releaseYear: number | null; mediaType: string } | null
   try {
     media = await prisma.media.findUnique({
       where: { id },
-      select: { id: true, title: true, releaseYear: true },
+      select: { id: true, title: true, releaseYear: true, mediaType: true },
     })
   } catch (err) {
     logger.error({ logId: 'thin-seeking-reel', err, mediaId: id }, 'Failed to fetch media for trailer lookup')
@@ -654,26 +759,36 @@ router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req
     return
   }
 
-  const query = encodeURIComponent(`${media.title} ${media.releaseYear ?? ''} official trailer`.trim())
-
-  let html: string
+  let tmdbId: number
   try {
-    const response = await axios.get(`https://www.youtube.com/results?search_query=${query}`, {
-      headers: BROWSER_HEADERS,
-      timeout: 15000,
-    })
-    html = response.data as string
+    tmdbId = await getTmdbId({ title: media.title, releaseYear: media.releaseYear, mediaType: media.mediaType as MediaType })
   } catch (err) {
-    logger.error({ logId: 'pale-searching-reel', err, mediaId: id }, 'Failed to fetch YouTube search results for trailer lookup')
-    res.status(500).json({ error: 'Internal server error' })
+    logger.error({ logId: 'pale-seeking-tmdb-reel', err, mediaId: id }, 'Failed to get TMDb ID for trailer lookup')
+    res.status(422).json({ error: 'Title not found on TMDb.' })
     return
   }
 
-  const videoIdMatch = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/)
   let trailerUrl: string | null = null
-
-  if (videoIdMatch?.[1]) {
-    trailerUrl = `https://www.youtube.com/watch?v=${videoIdMatch[1]}`
+  try {
+    const endpoint = media.mediaType === 'SHOW'
+      ? `https://api.themoviedb.org/3/tv/${tmdbId}/videos`
+      : `https://api.themoviedb.org/3/movie/${tmdbId}/videos`
+    const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+    const videosResponse = await axios.get(endpoint, {
+      headers: { Authorization: `Bearer ${tmdbToken}` },
+      timeout: 15000,
+    })
+    type VideoResult = { site: string; type: string; key: string }
+    type VideosData = { results?: VideoResult[] }
+    const videosData = videosResponse.data as VideosData
+    const trailer = (videosData.results ?? []).find(v => v.site === 'YouTube' && v.type === 'Trailer')
+    if (trailer) {
+      trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`
+    }
+  } catch (err) {
+    logger.error({ logId: 'pale-searching-reel', err, mediaId: id }, 'Failed to fetch TMDb videos for trailer lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
   }
 
   if (!trailerUrl) {
