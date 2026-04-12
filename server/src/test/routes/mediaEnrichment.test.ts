@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { app } from '../../index'
 import { createUser, makeToken, createMedia } from '../helpers'
 
-// Mock axios so tests don't hit real external APIs (Wikidata, YouTube, Amazon)
+// Mock axios so tests don't hit real external APIs
 vi.mock('axios')
 import axios from 'axios'
 const mockAxiosGet = vi.mocked(axios.get)
@@ -14,48 +14,24 @@ const prisma = new PrismaClient(
   databaseUrl !== undefined ? { datasources: { db: { url: databaseUrl } } } : undefined,
 )
 
-// Minimal Wikidata API search response returning a Q-number
-function makeWikidataSearchResponse(qid: string) {
-  return { data: { query: { search: [{ title: qid }] } } }
+// TMDb /find response for a MOVIE
+function makeTmdbFindMovieResponse(tmdbId: number) {
+  return { data: { movie_results: [{ id: tmdbId }], tv_results: [] } }
 }
 
-// Minimal Wikidata SPARQL response with actor name bindings (no character lookup)
-function makeWikidataSparqlResponse(actors: Array<{ name: string }>) {
-  return {
-    data: {
-      results: {
-        bindings: actors.map(({ name }) => ({
-          actorLabel: { value: name },
-        })),
-      },
-    },
-  }
+// TMDb /find response with no results
+function makeTmdbFindEmptyResponse() {
+  return { data: { movie_results: [], tv_results: [] } }
 }
 
-// Wikidata sitelinks response returning a Wikipedia article title (or null for no article)
-function makeWikidataSitelinksResponse(qid: string, wikiTitle: string | null) {
-  return {
-    data: {
-      entities: {
-        [qid]: wikiTitle
-          ? { sitelinks: { enwiki: { title: wikiTitle } } }
-          : { sitelinks: {} },
-      },
-    },
-  }
+// TMDb /credits response with cast
+function makeTmdbCreditsResponse(cast: Array<{ name: string; character: string }>) {
+  return { data: { cast } }
 }
 
-// Wikipedia wikitext parse response with a cast section
-function makeWikipediaWikitextResponse(castLines: string) {
-  return {
-    data: {
-      parse: {
-        wikitext: {
-          '*': `== Cast ==\n${castLines}\n\n== Production ==\nSome text.`,
-        },
-      },
-    },
-  }
+// TMDb /credits response with empty cast
+function makeTmdbCreditsEmptyResponse() {
+  return { data: { cast: [] } }
 }
 
 // Minimal Amazon search page HTML with an ASIN in a /gp/video/detail/ URL
@@ -140,7 +116,20 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns 422 when the Wikidata search request fails', async () => {
+  it('returns 422 when TMDb /find returns no results for the IMDB ID', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia()
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindEmptyResponse())
+    const res = await request(app)
+      .post(`/api/media/${media.id}/cast/import`)
+      .set('Cookie', `token=${token}`)
+      .send({ imdbId: 'tt9999999' })
+    expect(res.status).toBe(422)
+    expect(res.body.error).toMatch(/TMDb/i)
+  })
+
+  it('returns 422 when TMDb /find request fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
@@ -150,31 +139,17 @@ describe('POST /api/media/:id/cast/import', () => {
       .set('Cookie', `token=${token}`)
       .send({ imdbId: 'tt9999999' })
     expect(res.status).toBe(422)
-    expect(res.body.error).toMatch(/Wikidata/i)
+    expect(res.body.error).toMatch(/TMDb/i)
   })
 
-  it('returns 422 when Wikidata returns no entity for the IMDB ID', async () => {
+  it('returns 422 when TMDb credits returns an empty cast array', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
-    mockAxiosGet.mockResolvedValueOnce({ data: { query: { search: [] } } })
-    const res = await request(app)
-      .post(`/api/media/${media.id}/cast/import`)
-      .set('Cookie', `token=${token}`)
-      .send({ imdbId: 'tt9999999' })
-    expect(res.status).toBe(422)
-    expect(res.body.error).toMatch(/Wikidata/i)
-  })
-
-  it('returns 422 when the SPARQL query returns no cast bindings', async () => {
-    const editor = await createUser({ role: 'EDITOR' })
-    const token = makeToken(editor)
-    const media = await createMedia()
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
-    // Calls 2 & 3 (parallel): sitelinks + empty SPARQL
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
-    mockAxiosGet.mockResolvedValueOnce({ data: { results: { bindings: [] } } })
+    // Call 1: /find → tmdbId
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    // Call 2: /credits → empty cast
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsEmptyResponse())
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
       .set('Cookie', `token=${token}`)
@@ -183,22 +158,17 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.error).toMatch(/cast data/i)
   })
 
-  it('imports cast and returns summary on happy path for EDITOR', async () => {
+  it('imports cast with character names and returns summary on happy path for EDITOR', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Test Film' })
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
-    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', 'Test Film'))
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith' },
-      { name: 'Bob Jones' },
+    // Call 1: /find → tmdbId
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    // Call 2: /credits → cast with character names
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { name: 'Jane Smith', character: 'Hero' },
+      { name: 'Bob Jones', character: 'Villain' },
     ]))
-    // Call 4: Wikipedia wikitext with character names
-    mockAxiosGet.mockResolvedValueOnce(makeWikipediaWikitextResponse(
-      '* [[Jane Smith]] as [[Hero]], the main character\n* [[Bob Jones]] as Villain, the bad guy',
-    ))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -214,26 +184,27 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.created).toBe(2)
   })
 
-  it('imports cast and returns summary on happy path for ADMIN', async () => {
-    const admin = await createUser({ role: 'ADMIN' })
-    const token = makeToken(admin)
-    const media = await createMedia({ title: 'Admin Film' })
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q67890'))
-    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q67890', null))
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Alice Walker' },
+  it('sets characterName to null when TMDb character is empty string', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'No Char Film' })
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(99999))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { name: 'No Char Actor', character: '' },
     ]))
-    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
       .set('Cookie', `token=${token}`)
-      .send({ imdbId: 'tt7654321' })
+      .send({ imdbId: 'tt5555555' })
 
     expect(res.status).toBe(200)
-    expect(res.body.imported).toBe(1)
+    expect(res.body.created).toBe(1)
+
+    const actor = await prisma.actor.findFirst({ where: { name: 'No Char Actor' } })
+    expect(actor).not.toBeNull()
+    const castRole = await prisma.castRole.findFirst({ where: { mediaId: media.id, actorId: actor!.id } })
+    expect(castRole?.characterName).toBeNull()
   })
 
   it('matches existing actors instead of creating duplicates', async () => {
@@ -244,14 +215,10 @@ describe('POST /api/media/:id/cast/import', () => {
     // Pre-create an actor with the same name
     const existingActor = await prisma.actor.create({ data: { name: 'Jane Smith' } })
 
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
-    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith' },
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { name: 'Jane Smith', character: 'Hero' },
     ]))
-    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -277,14 +244,10 @@ describe('POST /api/media/:id/cast/import', () => {
       data: { mediaId: media.id, actorId: existingActor.id, characterName: 'Hero' },
     })
 
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
-    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', null))
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Jane Smith' },
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { name: 'Jane Smith', character: 'Hero' },
     ]))
-    // No Wikipedia call because sitelinks returned null wikiTitle
 
     const res = await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -296,21 +259,14 @@ describe('POST /api/media/:id/cast/import', () => {
     expect(res.body.imported).toBe(0)
   })
 
-  it('persists new actors and cast roles to the database', async () => {
+  it('persists new actors and cast roles with character names to the database', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia()
-    // Call 1: Wikidata search → Q-number
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSearchResponse('Q12345'))
-    // Calls 2 & 3 (parallel): sitelinks + SPARQL actor names
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSitelinksResponse('Q12345', 'Unique Actor Film'))
-    mockAxiosGet.mockResolvedValueOnce(makeWikidataSparqlResponse([
-      { name: 'Unique Actor Name' },
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbFindMovieResponse(12345))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbCreditsResponse([
+      { name: 'Unique Actor Name', character: 'The Lead' },
     ]))
-    // Call 4: Wikipedia wikitext with character name
-    mockAxiosGet.mockResolvedValueOnce(makeWikipediaWikitextResponse(
-      '* [[Unique Actor Name]] as [[The Lead]], the protagonist',
-    ))
 
     await request(app)
       .post(`/api/media/${media.id}/cast/import`)
@@ -669,7 +625,7 @@ describe('POST /api/media/:id/trailer-lookup', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Multi Result Film' })
-    const firstVideoId = 'dQw4w9WgXcw'
+    const firstVideoId = 'dQw4w9WgXcQ'
     const secondVideoId = 'oHg5SJYRHA0'
     const multiHtml = `<html><body><script>{"videoId":"${firstVideoId}"},{"videoId":"${secondVideoId}"}</script></body></html>`
     mockAxiosGet.mockResolvedValueOnce({ data: multiHtml })
