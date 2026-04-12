@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import request from 'supertest'
+import { PrismaClient } from '@prisma/client'
 import { app } from '../../index'
-import { createUser, makeToken, createActor } from '../helpers'
+import { createUser, makeToken, createActor, createMedia, createCastRole } from '../helpers'
+
+const databaseUrl = process.env['DATABASE_URL']
+const prisma = new PrismaClient(
+  databaseUrl !== undefined ? { datasources: { db: { url: databaseUrl } } } : undefined,
+)
 
 describe('GET /api/actors', () => {
   it('returns 401 when no auth is provided', async () => {
@@ -141,6 +147,78 @@ describe('PUT /api/actors/:id', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.name).toBe('Updated Name')
+  })
+})
+
+describe('DELETE /api/actors/purge', () => {
+  it('returns 401 when no auth is provided', async () => {
+    const res = await request(app).delete('/api/actors/purge')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 403 for VIEWER role', async () => {
+    const viewer = await createUser({ role: 'VIEWER' })
+    const token = makeToken(viewer)
+    const res = await request(app)
+      .delete('/api/actors/purge')
+      .set('Cookie', `token=${token}`)
+    expect(res.status).toBe(403)
+  })
+
+  it('deletes actors with no cast roles and returns count for EDITOR', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+
+    // Create actors with no cast roles
+    await createActor({ name: 'Orphan Actor One' })
+    await createActor({ name: 'Orphan Actor Two' })
+
+    // Create an actor with a cast role (should NOT be deleted)
+    const media = await createMedia()
+    const linkedActor = await createActor({ name: 'Linked Actor' })
+    await createCastRole(media.id, linkedActor.id)
+
+    const res = await request(app)
+      .delete('/api/actors/purge')
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.deleted).toBe(2)
+
+    // Linked actor should still exist
+    const remaining = await prisma.actor.findUnique({ where: { id: linkedActor.id } })
+    expect(remaining).not.toBeNull()
+  })
+
+  it('returns { deleted: 0 } when no actors qualify', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+
+    // All actors have cast roles
+    const media = await createMedia()
+    const actor = await createActor({ name: 'Has Role Actor' })
+    await createCastRole(media.id, actor.id)
+
+    const res = await request(app)
+      .delete('/api/actors/purge')
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.deleted).toBe(0)
+  })
+
+  it('works for ADMIN role', async () => {
+    const admin = await createUser({ role: 'ADMIN' })
+    const token = makeToken(admin)
+
+    await createActor({ name: 'Admin Purge Actor' })
+
+    const res = await request(app)
+      .delete('/api/actors/purge')
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.deleted).toBeGreaterThanOrEqual(1)
   })
 })
 

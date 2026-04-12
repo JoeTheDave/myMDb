@@ -259,6 +259,18 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: 
   }
 })
 
+// DELETE /api/actors/purge
+router.delete('/purge', authenticate, authorize('EDITOR'), async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await prisma.actor.deleteMany({ where: { castRoles: { none: {} } } })
+    logger.info({ logId: 'swift-clearing-cast', count: result.count }, 'Purged actors without cast roles')
+    res.json({ deleted: result.count })
+  } catch (err) {
+    logger.error({ logId: 'dark-purging-cast', err }, 'Failed to purge actors without cast roles')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 // DELETE /api/actors/:id
 router.delete('/:id', authenticate, authorize('ADMIN'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
