@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Lightbulb, Loader2 } from 'lucide-react'
+import { ExternalLink, Lightbulb, Loader2, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { mediaApi, ApiError } from '@/lib/api'
 
@@ -13,12 +13,14 @@ interface AmazonPrimeSectionProps {
 export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: AmazonPrimeSectionProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(amazonPrimeUrl)
   const [inputValue, setInputValue] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
   const queryClient = useQueryClient()
 
   const updateMutation = useMutation({
     mutationFn: (url: string | null) => mediaApi.updateAmazonPrimeUrl(mediaId, url),
     onSuccess: (result) => {
       setLocalUrl(result.amazonPrimeUrl)
+      setIsEditing(false)
       void queryClient.invalidateQueries({ queryKey: ['media', mediaId] })
     },
     onError: (err) => {
@@ -32,6 +34,7 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
     onSuccess: (result) => {
       if (result.amazonPrimeUrl) {
         setLocalUrl(result.amazonPrimeUrl)
+        setIsEditing(false)
         void queryClient.invalidateQueries({ queryKey: ['media', mediaId] })
       } else {
         toast.info('No Amazon Prime listing found for this title.')
@@ -52,10 +55,19 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       handleInputCommit()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+      setInputValue('')
     }
   }
 
-  if (localUrl) {
+  function handleEditClick() {
+    setInputValue(localUrl ?? '')
+    setIsEditing(true)
+  }
+
+  // Link display mode (URL set, not editing)
+  if (localUrl && !isEditing) {
     return (
       <div className="flex items-center gap-2">
         <a
@@ -68,18 +80,27 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
           Watch on Amazon Prime
         </a>
         {isEditor && (
-          <button
-            onClick={() => lookupMutation.mutate()}
-            disabled={lookupMutation.isPending}
-            title="Re-run Amazon Prime lookup"
-            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-          >
-            {lookupMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Lightbulb className="size-3.5" />
-            )}
-          </button>
+          <>
+            <button
+              onClick={() => lookupMutation.mutate()}
+              disabled={lookupMutation.isPending}
+              title="Re-run Amazon Prime lookup"
+              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+            >
+              {lookupMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Lightbulb className="size-3.5" />
+              )}
+            </button>
+            <button
+              onClick={handleEditClick}
+              title="Edit Amazon Prime link"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          </>
         )}
       </div>
     )
@@ -89,6 +110,7 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
     return <span className="text-sm text-muted-foreground">—</span>
   }
 
+  // Input mode (URL null, or editor clicked pencil)
   return (
     <div className="flex items-center gap-2">
       <input
@@ -100,6 +122,7 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
         placeholder="Amazon Prime movie link"
         className="h-7 text-xs rounded-md border border-input bg-transparent px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-56 disabled:opacity-50"
         disabled={updateMutation.isPending}
+        autoFocus={isEditing}
       />
       <button
         onClick={() => lookupMutation.mutate()}
