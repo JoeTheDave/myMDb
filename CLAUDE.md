@@ -4,7 +4,7 @@
 A personal movie and media database for tracking, rating, and managing a film collection — with full cast/crew data and admin-controlled access.
 
 ## Stack
-- **Frontend**: React 18, TypeScript, Tailwind CSS, shadcn/ui, Vite, React Router
+- **Frontend**: React 18, TypeScript, Tailwind CSS, Vite, React Router
 - **Backend**: Express, Prisma ORM, TypeScript, pino logging
 - **Auth**: Google OAuth via Passport.js (no email/password login)
 - **Database**: PostgreSQL — `sage-shared-dev-postgres` Docker container locally, `sage-shared-postgres` Fly.io cluster in prod
