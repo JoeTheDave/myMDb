@@ -13,11 +13,12 @@ import { Select, SelectItem } from '@/components/ui/select'
 interface SortableCastCardProps {
   member: CastMemberDetail
   isEditor: boolean
+  mediaTitle: string
   onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
 }
 
-function SortableCastCard({ member, isEditor, onUpdate, onRemove }: SortableCastCardProps) {
+function SortableCastCard({ member, isEditor, mediaTitle, onUpdate, onRemove }: SortableCastCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: member.id })
   const style = { transform: CSS.Transform.toString(transform), transition }
   const dragHandleProps = isEditor ? { ...attributes, ...listeners } : undefined
@@ -26,6 +27,7 @@ function SortableCastCard({ member, isEditor, onUpdate, onRemove }: SortableCast
       <CastCard
         member={member}
         isEditor={isEditor}
+        mediaTitle={mediaTitle}
         onUpdate={onUpdate}
         onRemove={onRemove}
         {...(dragHandleProps != null ? { dragHandleProps } : {})}
@@ -37,12 +39,13 @@ function SortableCastCard({ member, isEditor, onUpdate, onRemove }: SortableCast
 
 interface CastSectionProps {
   mediaId: string
+  mediaTitle: string
   cast: CastMemberDetail[]
   isEditor: boolean
   castSortOrder: CastSortOrder
 }
 
-export function CastSection({ mediaId, cast, isEditor, castSortOrder }: CastSectionProps) {
+export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder }: CastSectionProps) {
   const queryClient = useQueryClient()
   const [localCast, setLocalCast] = useState(cast)
   const [currentSort, setCurrentSort] = useState<CastSortOrder>(castSortOrder)
@@ -149,6 +152,7 @@ export function CastSection({ mediaId, cast, isEditor, castSortOrder }: CastSect
                 key={member.id}
                 member={member}
                 isEditor={isEditor}
+                mediaTitle={mediaTitle}
                 onUpdate={handleUpdate}
                 onRemove={handleRemove}
               />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ChevronLeft, ChevronRight, Search, Settings, Trash2 } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Search, Settings, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { actorApi } from '@/lib/api'
 import { hasMinRole } from '@/lib/types'
@@ -30,8 +30,8 @@ export function ActorsPage() {
 
   const [searchInput, setSearchInput] = useState('')
   const [committedSearch, setCommittedSearch] = useState('')
-  const [page, setPage] = useState(1)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const [gearOpen, setGearOpen] = useState(false)
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false)
@@ -70,26 +70,46 @@ export function ActorsPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setCommittedSearch(searchInput)
-      setPage(1)
     }, 2000)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [searchInput])
 
-  const filters = {
-    page,
-    limit: 24,
-    ...(committedSearch ? { q: committedSearch } : {}),
-  }
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['actors', filters],
-    queryFn: () => actorApi.list(filters),
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['actors', { limit: 24, q: committedSearch }],
+    queryFn: ({ pageParam = 1 }) => actorApi.list({
+      page: pageParam as number,
+      limit: 24,
+      ...(committedSearch ? { q: committedSearch } : {}),
+    }),
+    getNextPageParam: (lastPage) =>
+      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
   })
 
-  const totalPages = data?.totalPages ?? 1
-  const currentPage = page
+  const items = data?.pages.flatMap(p => p.items) ?? []
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const SUB_HEADER_HEIGHT = 60
 
@@ -213,7 +233,7 @@ export function ActorsPage() {
               <ActorCardSkeleton key={i} />
             ))}
           </div>
-        ) : data?.items.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
             <p className="text-lg font-medium">No actors found</p>
             <p className="text-sm">Try a different search</p>
@@ -221,35 +241,17 @@ export function ActorsPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-              {data?.items.map(actor => (
+              {items.map(actor => (
                 <ActorCard key={actor.id} actor={actor} />
               ))}
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-3 mt-10">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => setPage(p => p - 1)}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground px-2 tabular-nums">
-                  {currentPage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setPage(p => p + 1)}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
+            {isFetchingNextPage && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
               </div>
             )}
+            <div ref={sentinelRef} className="h-1" />
           </>
         )}
       </div>

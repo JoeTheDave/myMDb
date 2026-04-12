@@ -194,6 +194,7 @@ export function MediaDetailPage() {
       <section className="mt-10">
         <CastSection
           mediaId={media.id}
+          mediaTitle={media.title}
           cast={media.cast}
           isEditor={isEditor}
           castSortOrder={media.castSortOrder}
