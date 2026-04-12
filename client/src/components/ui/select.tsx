@@ -98,7 +98,7 @@ function Select({ value, onValueChange, children, className, size = 'default', p
           <div
             role="listbox"
             className={cn(
-              'absolute z-50 top-full mt-1 left-0 right-0',
+              'absolute z-50 top-full mt-1 left-0 min-w-full w-max',
               'bg-popover border border-border rounded-lg shadow-xl',
               'py-1 max-h-60 overflow-y-auto',
             )}
