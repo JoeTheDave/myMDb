@@ -133,7 +133,7 @@ export function CastSection({ mediaId, cast, isEditor, castSortOrder }: CastSect
         <h2 className="text-xl font-semibold">Cast</h2>
         {isEditor && <ImdbCastImport mediaId={mediaId} />}
         {isEditor && (
-          <Select value={currentSort} onValueChange={value => { void handleSortChange(value) }} size="sm">
+          <Select value={currentSort} onValueChange={value => { void handleSortChange(value) }} size="sm" className="min-w-[6.5rem]">
             {/* CUSTOM label item — hidden from the dropdown list, only used for display */}
             <SelectItem value="CUSTOM" className="hidden">Custom</SelectItem>
             <SelectItem value="BY_ACTOR">By Actor</SelectItem>
