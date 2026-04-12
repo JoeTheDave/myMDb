@@ -58,9 +58,9 @@ function makeWikipediaWikitextResponse(castLines: string) {
   }
 }
 
-// Minimal Amazon search page HTML with an ASIN in a /dp/ URL
+// Minimal Amazon search page HTML with an ASIN in a /gp/video/detail/ URL
 function makeAmazonHtml(asin: string) {
-  return `<html><body><a href="/dp/${asin}/">Watch on Amazon</a></body></html>`
+  return `<html><body><a href="/gp/video/detail/${asin}/">Watch on Prime Video</a></body></html>`
 }
 
 // Minimal YouTube search results page with embedded videoId JSON
@@ -418,18 +418,16 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Dune' })
-    // The Amazon search page may have dirty /dp/ links — we only capture the ASIN and build a clean URL
-    const htmlWithDirtyLink = '<html><body><a href="/dp/B001234567?ref=some-tracking&tag=foo">Buy</a></body></html>'
-    mockAxiosGet.mockResolvedValueOnce({ data: htmlWithDirtyLink })
+    // The Amazon search page uses /gp/video/detail/ URLs for Prime Video streaming
+    const htmlWithPrimeLink = '<html><body><a href="/gp/video/detail/B001234567/">Watch on Prime Video</a></body></html>'
+    mockAxiosGet.mockResolvedValueOnce({ data: htmlWithPrimeLink })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.amazonPrimeUrl).not.toContain('ref=')
-    expect(res.body.amazonPrimeUrl).not.toContain('tag=')
-    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/dp/B001234567/')
+    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/gp/video/detail/B001234567/')
   })
 })
 

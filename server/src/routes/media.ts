@@ -656,11 +656,11 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     return
   }
 
-  const asinMatch = html.match(/\/dp\/([A-Z0-9]{10})/)
+  const asinMatch = html.match(/\/gp\/video\/detail\/([A-Z0-9]{10})/)
   let amazonPrimeUrl: string | null = null
 
   if (asinMatch?.[1]) {
-    amazonPrimeUrl = `https://www.amazon.com/dp/${asinMatch[1]}/`
+    amazonPrimeUrl = `https://www.amazon.com/gp/video/detail/${asinMatch[1]}/`
   }
 
   if (!amazonPrimeUrl) {
