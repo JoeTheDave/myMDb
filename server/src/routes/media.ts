@@ -686,20 +686,22 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
       const justwatchUrl = usRegion.link ?? null
       if (justwatchUrl) {
         try {
-          const jwResponse = await axios.get<string>(justwatchUrl, {
+          const tmdbWatchResponse = await axios.get<string>(justwatchUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
             timeout: 15000,
           })
-          const asinMatch = jwResponse.data.match(/amazon\.com\/(?:dp|gp\/video\/detail)\/([A-Z0-9]{10})/i)
-          if (asinMatch?.[1]) {
-            amazonPrimeUrl = `https://www.amazon.com/gp/video/detail/${asinMatch[1]}`
-            logger.info({ logId: 'swift-extracting-asin', mediaId: id, asin: asinMatch[1] }, 'Extracted Amazon ASIN from JustWatch page')
+          // TMDb watch pages embed JustWatch tracking links with the real destination in the r= param:
+          // href="https://click.justwatch.com/a?...&r=https%3A%2F%2Fwatch.amazon.com%2Fdetail%3Fgti%3Damzn1.dv.gti.{guid}..."
+          const amazonMatch = tmdbWatchResponse.data.match(/[?&]r=(https%3A%2F%2Fwatch\.amazon\.com%2Fdetail[^"&]*)/)
+          if (amazonMatch?.[1]) {
+            amazonPrimeUrl = decodeURIComponent(amazonMatch[1])
+            logger.info({ logId: 'swift-extracting-amazon', mediaId: id, amazonPrimeUrl }, 'Extracted Amazon URL from TMDb watch page')
           } else {
-            logger.warn({ logId: 'pale-missing-asin', mediaId: id, justwatchUrl }, 'No Amazon ASIN found in JustWatch HTML — falling back to JustWatch URL')
+            logger.warn({ logId: 'pale-missing-amazon', mediaId: id, justwatchUrl }, 'No Amazon URL found in TMDb watch page HTML — falling back to TMDb URL')
             amazonPrimeUrl = justwatchUrl
           }
         } catch (err) {
-          logger.warn({ logId: 'grey-fetching-justwatch', err, mediaId: id }, 'Failed to fetch JustWatch page — falling back to JustWatch URL')
+          logger.warn({ logId: 'grey-fetching-tmdb-watch', err, mediaId: id }, 'Failed to fetch TMDb watch page — falling back to TMDb URL')
           amazonPrimeUrl = justwatchUrl
         }
       }
