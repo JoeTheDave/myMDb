@@ -117,6 +117,7 @@ function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCa
               onChange={handleRoleImageChange}
               actorName={actorName}
               characterName={item.characterName}
+              mediaTitle={item.title}
             />
           ) : item.roleImageUrl ? (
             <img

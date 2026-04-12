@@ -8,13 +8,14 @@ import { RoleImageSlot } from '@/components/RoleImageSlot'
 interface CastCardProps {
   member: CastMemberDetail
   isEditor: boolean
+  mediaTitle: string
   onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement> | undefined
   isDragging?: boolean | undefined
 }
 
-export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps, isDragging }: CastCardProps) {
+export function CastCard({ member, isEditor, mediaTitle, onUpdate, onRemove, dragHandleProps, isDragging }: CastCardProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -132,6 +133,7 @@ export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps
               onChange={handleRoleImageChange}
               actorName={member.actor.name}
               characterName={member.characterName}
+              mediaTitle={mediaTitle}
             />
           ) : member.roleImageUrl ? (
             <img

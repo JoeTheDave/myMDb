@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Clipboard, Loader2, Lightbulb } from 'lucide-react'
+import { Clipboard, Loader2, Lightbulb, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { uploadApi, imageApi } from '@/lib/api'
@@ -163,9 +163,10 @@ interface RoleImageSlotProps {
   onChange: (url: string | undefined) => Promise<void>
   actorName: string
   characterName: string | null
+  mediaTitle: string
 }
 
-export function RoleImageSlot({ value, onChange, actorName, characterName }: RoleImageSlotProps) {
+export function RoleImageSlot({ value, onChange, actorName, characterName, mediaTitle }: RoleImageSlotProps) {
   const [uploading, setUploading] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -274,6 +275,28 @@ export function RoleImageSlot({ value, onChange, actorName, characterName }: Rol
             <Clipboard className="size-5 opacity-40" />
             <span className="text-[10px] leading-tight text-center px-1">Role Image</span>
           </div>
+        )}
+
+        {/* Google Image Search button — EDITOR+ only, bottom-right area, visible on hover */}
+        {isEditor && (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              const q = [actorName, mediaTitle, characterName].filter(Boolean).join(' ')
+              window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`, '_blank', 'noopener,noreferrer')
+            }}
+            className={cn(
+              'absolute bottom-1.5 right-8 z-10',
+              'size-6 rounded-full bg-black/60 text-white',
+              'flex items-center justify-center',
+              'opacity-0 group-hover/slot:opacity-100 transition-all duration-150',
+              'hover:scale-110 hover:brightness-125',
+            )}
+            aria-label="Search Google Images"
+          >
+            <ExternalLink className="size-3.5" />
+          </button>
         )}
 
         {/* Lightbulb button — EDITOR+ only, bottom-right corner, visible on hover */}

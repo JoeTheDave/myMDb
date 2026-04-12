@@ -62,12 +62,12 @@ export function TrailerButton({ mediaId, trailerUrl: initialTrailerUrl, isEditor
         onClick={handleClick}
         disabled={lookupMutation.isPending}
         title="Watch trailer"
-        className="inline-flex items-center justify-center size-8 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+        className="inline-flex items-center justify-center size-14 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
       >
         {lookupMutation.isPending ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Loader2 className="size-7 animate-spin" />
         ) : (
-          <Clapperboard className="size-4" />
+          <Clapperboard className="size-7" />
         )}
       </button>
 
