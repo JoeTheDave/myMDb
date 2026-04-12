@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useAuth } from '@/hooks/useAuth'
 import { useState } from 'react'
 import { CastSection } from '@/components/CastSection'
+import { AmazonPrimeSection } from '@/components/AmazonPrimeSection'
+import { TrailerButton } from '@/components/TrailerButton'
 import { criticIcon, audienceIcon } from '@/lib/rtIcons'
 
 function DetailSkeleton() {
@@ -170,6 +172,21 @@ export function MediaDetailPage() {
               )}
             </Button>
           ) : null}
+
+          {/* Amazon Prime Link */}
+          <AmazonPrimeSection
+            mediaId={media.id}
+            amazonPrimeUrl={media.amazonPrimeUrl}
+            isEditor={isEditor}
+          />
+
+          {/* Trailer */}
+          <TrailerButton
+            mediaId={media.id}
+            trailerUrl={media.trailerUrl}
+            isEditor={isEditor}
+            title={media.title}
+          />
         </div>
       </div>
 

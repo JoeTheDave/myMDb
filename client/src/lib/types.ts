@@ -64,6 +64,8 @@ export interface MediaDetail {
   cast: CastMemberDetail[]
   criticRating: number | null
   audienceRating: number | null
+  amazonPrimeUrl: string | null
+  trailerUrl: string | null
 }
 
 export interface ActorListItem {

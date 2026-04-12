@@ -107,6 +107,22 @@ export const mediaApi = {
   delete: (id: string) => apiFetch<void>('/api/media/' + id, { method: 'DELETE' }),
   fetchRatings: (id: string) =>
     apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/fetch-ratings', { method: 'PATCH' }),
+  importCast: (id: string, imdbId: string) =>
+    apiFetch<{ imported: number; matched: number; created: number; skipped: number }>('/api/media/' + id + '/cast/import', {
+      method: 'POST',
+      body: JSON.stringify({ imdbId }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  updateAmazonPrimeUrl: (id: string, amazonPrimeUrl: string | null) =>
+    apiFetch<{ amazonPrimeUrl: string | null }>('/api/media/' + id + '/amazon-prime-url', {
+      method: 'PATCH',
+      body: JSON.stringify({ amazonPrimeUrl }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  lookupAmazonPrime: (id: string) =>
+    apiFetch<{ amazonPrimeUrl: string | null }>('/api/media/' + id + '/amazon-lookup', { method: 'POST' }),
+  lookupTrailer: (id: string) =>
+    apiFetch<{ trailerUrl: string | null }>('/api/media/' + id + '/trailer-lookup', { method: 'POST' }),
 }
 
 export const actorApi = {
