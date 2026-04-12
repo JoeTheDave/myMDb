@@ -53,38 +53,41 @@ export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
     }
   }
 
-  async function handlePaste() {
-    const canUseClipboard = typeof navigator.clipboard?.read === 'function'
+  function handlePaste() {
+    const isTouchDevice = window.matchMedia('(hover: none)').matches
+    const canUseClipboard = !isTouchDevice && typeof navigator.clipboard?.read === 'function'
 
     if (!canUseClipboard) {
       fileInputRef.current?.click()
       return
     }
 
-    try {
-      const items = await navigator.clipboard.read()
-      const imageItem = items.find(item => item.types.some(t => t.startsWith('image/')))
-      if (!imageItem) { toast.error('No image found in clipboard'); return }
-      const imageType = imageItem.types.find(t => t.startsWith('image/'))!
-      const blob = await imageItem.getType(imageType)
-      const resized = await resizeIfNeeded(blob)
-      const file = new File([resized], 'clipboard-image.jpg', { type: 'image/jpeg' })
-      setUploading(true)
+    void (async () => {
       try {
-        const { url } = await uploadApi.upload(file)
-        await onChange(url)
-      } catch {
-        toast.error('Upload failed')
-      } finally {
-        setUploading(false)
+        const items = await navigator.clipboard.read()
+        const imageItem = items.find(item => item.types.some(t => t.startsWith('image/')))
+        if (!imageItem) { toast.error('No image found in clipboard'); return }
+        const imageType = imageItem.types.find(t => t.startsWith('image/'))!
+        const blob = await imageItem.getType(imageType)
+        const resized = await resizeIfNeeded(blob)
+        const file = new File([resized], 'clipboard-image.jpg', { type: 'image/jpeg' })
+        setUploading(true)
+        try {
+          const { url } = await uploadApi.upload(file)
+          await onChange(url)
+        } catch {
+          toast.error('Upload failed')
+        } finally {
+          setUploading(false)
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'NotAllowedError') {
+          toast.error('Clipboard access denied')
+        } else {
+          toast.error('No image found in clipboard')
+        }
       }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        toast.error('Clipboard access denied')
-      } else {
-        toast.error('No image found in clipboard')
-      }
-    }
+    })()
   }
 
   return (
