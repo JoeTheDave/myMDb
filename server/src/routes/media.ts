@@ -406,9 +406,9 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  let media: { id: string } | null
+  let media: { id: string; mediaType: string } | null
   try {
-    media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+    media = await prisma.media.findUnique({ where: { id }, select: { id: true, mediaType: true } })
   } catch (err) {
     logger.error({ logId: 'cold-seeking-cast', err, mediaId: id }, 'Failed to fetch media for cast import')
     res.status(500).json({ error: 'Internal server error' })
@@ -419,141 +419,60 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     return
   }
 
-  // Step 1: Resolve IMDB ID to Wikidata Q-number
-  let wikidataId: string
+  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+  const tmdbAuthHeader = { Authorization: `Bearer ${tmdbToken}` }
+
+  // Step 1: Map IMDB ID → TMDb ID via /find endpoint
+  let tmdbId: number
   try {
-    const searchResponse = await axios.get('https://www.wikidata.org/w/api.php', {
-      params: {
-        action: 'query',
-        list: 'search',
-        srsearch: `haswbstatement:P345=${imdbId}`,
-        format: 'json',
-      },
-      headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
+    const findResponse = await axios.get(`https://api.themoviedb.org/3/find/${imdbId}`, {
+      params: { external_source: 'imdb_id' },
+      headers: tmdbAuthHeader,
       timeout: 15000,
     })
-    const searchData = searchResponse.data as { query?: { search?: Array<{ title?: string }> } }
-    const qid = searchData?.query?.search?.[0]?.title
-    if (!qid) {
-      logger.warn({ logId: 'pale-missing-wikidata', imdbId }, 'No Wikidata entity found for IMDB ID')
-      res.status(422).json({ error: 'Title not found in Wikidata. Verify the IMDB ID.' })
+    type FindData = { movie_results?: Array<{ id: number }>; tv_results?: Array<{ id: number }> }
+    const findData = findResponse.data as FindData
+    const tmdbResult = media.mediaType === 'SHOW'
+      ? findData.tv_results?.[0]
+      : findData.movie_results?.[0]
+    if (!tmdbResult) {
+      logger.warn({ logId: 'pale-missing-tmdb', imdbId }, 'No TMDb entry found for IMDB ID')
+      res.status(422).json({ error: 'Title not found on TMDb. Verify the IMDB ID.' })
       return
     }
-    wikidataId = qid
+    tmdbId = tmdbResult.id
   } catch (err) {
-    logger.error({ logId: 'faint-pulling-mast', err, imdbId }, 'Failed to query Wikidata for IMDB ID')
-    res.status(422).json({ error: 'Title not found in Wikidata. Verify the IMDB ID.' })
+    logger.error({ logId: 'faint-pulling-tmdb', err, imdbId }, 'Failed to query TMDb /find for IMDB ID')
+    res.status(422).json({ error: 'Title not found on TMDb. Verify the IMDB ID.' })
     return
   }
 
-  // Step 2: Run Steps A and B in parallel
-  // Step A: Get Wikipedia article title from Wikidata sitelinks
-  // Step B: Simplified SPARQL for actor names only (no character lookup)
-  const simplifiedSparqlQuery = `SELECT ?actorLabel WHERE {
-  wd:${wikidataId} p:P161 ?role .
-  ?role ps:P161 ?actor .
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
-}`
-
-  type SparqlData = { results?: { bindings?: Array<{ actorLabel?: { value: string } }> } }
-  type SitelinksData = { entities?: Record<string, { sitelinks?: { enwiki?: { title?: string } } }> }
-
-  let sparqlData: SparqlData
-  let wikiTitle: string | null
-
+  // Step 2: Fetch cast from TMDb credits endpoint
+  type TmdbCastMember = { name: string; character: string }
+  let castEntries: Array<{ actorName: string; character: string }>
   try {
-    const [sitelinksResponse, sparqlResponse] = await Promise.all([
-      axios.get('https://www.wikidata.org/w/api.php', {
-        params: {
-          action: 'wbgetentities',
-          ids: wikidataId,
-          props: 'sitelinks',
-          sitefilter: 'enwiki',
-          format: 'json',
-        },
-        headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
-        timeout: 15000,
-      }),
-      axios.get(`https://query.wikidata.org/sparql?query=${encodeURIComponent(simplifiedSparqlQuery)}&format=json`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'mymdb/1.0 (personal movie database)',
-        },
-        timeout: 15000,
-      }),
-    ])
-
-    const sitelinksData = sitelinksResponse.data as SitelinksData
-    wikiTitle = sitelinksData?.entities?.[wikidataId]?.sitelinks?.enwiki?.title ?? null
-    sparqlData = sparqlResponse.data as SparqlData
-  } catch (err) {
-    logger.error({ logId: 'blunt-breaking-net', err, wikidataId }, 'Failed to fetch SPARQL cast data from Wikidata')
-    res.status(422).json({ error: 'No cast data found in Wikidata for this title.' })
-    return
-  }
-
-  const bindings = sparqlData?.results?.bindings ?? []
-  if (bindings.length === 0) {
-    logger.warn({ logId: 'pale-missing-list', imdbId, wikidataId }, 'No cast bindings returned from Wikidata SPARQL')
-    res.status(422).json({ error: 'No cast data found in Wikidata for this title.' })
-    return
-  }
-
-  // Step C: Fetch Wikipedia wikitext and parse cast section for character names
-  const wikiCharacterMap = new Map<string, string>()
-  if (wikiTitle) {
-    try {
-      const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
-        params: {
-          action: 'parse',
-          page: wikiTitle,
-          prop: 'wikitext',
-          format: 'json',
-        },
-        headers: { 'User-Agent': 'mymdb/1.0 (personal movie database)' },
-        timeout: 15000,
-      })
-      const wikiData = wikiResponse.data as { parse?: { wikitext?: { '*'?: string } } }
-      const wikitext = wikiData?.parse?.wikitext?.['*'] ?? ''
-
-      const castSectionMatch = wikitext.match(/==\s*[Cc]ast\s*==\s*([\s\S]+?)(?=\s*==|$)/)
-      if (castSectionMatch?.[1]) {
-        const castSection = castSectionMatch[1]
-        const lineRegex = /^\*\s+(.+?)\s+as\s+(.+)$/gm
-        let lineMatch: RegExpExecArray | null
-        while ((lineMatch = lineRegex.exec(castSection)) !== null) {
-          const rawActor = lineMatch[1] ?? ''
-          const rawChar = lineMatch[2] ?? ''
-
-          // Strip wiki markup: [[X|Y]] → Y, [[X]] → X
-          const stripMarkup = (s: string) =>
-            s.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
-             .replace(/\[\[([^\]]+)\]\]/g, '$1')
-             .trim()
-
-          const actorName = stripMarkup(rawActor)
-          const charFull = stripMarkup(rawChar)
-          // Take only the part before the first ", "
-          const charName = charFull.split(/, /)[0] ?? charFull
-
-          if (actorName) {
-            wikiCharacterMap.set(actorName.toLowerCase(), charName)
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn({ logId: 'soft-missing-wiki', err, wikiTitle }, 'Failed to fetch or parse Wikipedia wikitext; continuing with empty character names')
+    const creditsEndpoint = media.mediaType === 'SHOW'
+      ? `https://api.themoviedb.org/3/tv/${tmdbId}/credits`
+      : `https://api.themoviedb.org/3/movie/${tmdbId}/credits`
+    const creditsResponse = await axios.get(creditsEndpoint, {
+      headers: tmdbAuthHeader,
+      timeout: 15000,
+    })
+    const creditsData = creditsResponse.data as { cast?: TmdbCastMember[] }
+    const cast = creditsData.cast ?? []
+    if (cast.length === 0) {
+      logger.warn({ logId: 'pale-missing-credits', imdbId, tmdbId }, 'No cast data returned from TMDb credits')
+      res.status(422).json({ error: 'No cast data found on TMDb for this title.' })
+      return
     }
-  }
-
-  // Build cast entries: Wikidata SPARQL is source of truth for WHO; Wikipedia provides character names
-  const castEntries: Array<{ actorName: string; character: string }> = []
-  for (const binding of bindings) {
-    const actorName = binding.actorLabel?.value ?? ''
-    // Filter out entries where actorLabel is a QID (no English label)
-    if (!actorName || /^Q\d+$/.test(actorName)) continue
-    const character = wikiCharacterMap.get(actorName.toLowerCase()) ?? ''
-    castEntries.push({ actorName, character })
+    castEntries = cast.map((member) => ({
+      actorName: member.name,
+      character: member.character,
+    }))
+  } catch (err) {
+    logger.error({ logId: 'blunt-breaking-credits', err, tmdbId }, 'Failed to fetch TMDb credits')
+    res.status(422).json({ error: 'No cast data found on TMDb for this title.' })
+    return
   }
 
   let imported = 0
@@ -600,7 +519,7 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
           continue
         }
         await prisma.castRole.create({
-          data: { mediaId: id, actorId: existingActor.id, characterName: character || null },
+          data: { mediaId: id, actorId: existingActor.id, characterName: character || null, billingOrder: i },
         })
         castRoleActorIds.add(existingActor.id)
         imported++
@@ -609,7 +528,7 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
         const newActor = await prisma.actor.create({ data: { name: actorName } })
         actorByName.set(actorName.toLowerCase(), newActor)
         await prisma.castRole.create({
-          data: { mediaId: id, actorId: newActor.id, characterName: character || null },
+          data: { mediaId: id, actorId: newActor.id, characterName: character || null, billingOrder: i },
         })
         castRoleActorIds.add(newActor.id)
         imported++

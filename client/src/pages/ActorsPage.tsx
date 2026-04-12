@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Plus, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, ChevronLeft, ChevronRight, Search, Settings, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { actorApi } from '@/lib/api'
 import { hasMinRole } from '@/lib/types'
 import { ActorCard } from '@/components/ActorCard'
@@ -24,12 +25,45 @@ function ActorCardSkeleton() {
 
 export function ActorsPage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
 
   const [searchInput, setSearchInput] = useState('')
   const [committedSearch, setCommittedSearch] = useState('')
   const [page, setPage] = useState(1)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [gearOpen, setGearOpen] = useState(false)
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false)
+  const gearRef = useRef<HTMLDivElement>(null)
+
+  // Close gear dropdown on outside click
+  useEffect(() => {
+    if (!gearOpen) return
+    function handleMouseDown(e: MouseEvent) {
+      if (gearRef.current && !gearRef.current.contains(e.target as Node)) {
+        setGearOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [gearOpen])
+
+  const purgeMutation = useMutation({
+    mutationFn: () => actorApi.purge(),
+    onSuccess: (data) => {
+      setPurgeDialogOpen(false)
+      if (data.deleted === 0) {
+        toast.success('No actors to purge.')
+      } else {
+        toast.success(`${data.deleted} actor${data.deleted === 1 ? '' : 's'} deleted.`)
+      }
+      void queryClient.invalidateQueries({ queryKey: ['actors'] })
+    },
+    onError: () => {
+      toast.error('Failed to purge actors')
+    },
+  })
 
   // 2-second debounce on search
   useEffect(() => {
@@ -86,21 +120,87 @@ export function ActorsPage() {
             />
           </div>
 
-          {/* Round add button */}
+          {/* Round add button + gear menu */}
           {isEditor && (
-            <Link to="/actors/new">
-              <Button
-                variant="default"
-                size="round-icon"
-                aria-label="Add Actor"
-                title="Add Actor"
-              >
-                <Plus className="size-5" />
-              </Button>
-            </Link>
+            <>
+              <Link to="/actors/new">
+                <Button
+                  variant="default"
+                  size="round-icon"
+                  aria-label="Add Actor"
+                  title="Add Actor"
+                >
+                  <Plus className="size-5" />
+                </Button>
+              </Link>
+
+              {/* Gear menu */}
+              <div ref={gearRef} className="relative">
+                <Button
+                  variant="outline"
+                  size="round-icon"
+                  aria-label="Actor options"
+                  title="Actor options"
+                  onClick={() => setGearOpen(prev => !prev)}
+                >
+                  <Settings className="size-5" />
+                </Button>
+
+                {gearOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-border bg-popover shadow-lg z-20 py-1 overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
+                      onClick={() => {
+                        setGearOpen(false)
+                        setPurgeDialogOpen(true)
+                      }}
+                    >
+                      <Trash2 className="size-4 shrink-0" />
+                      Purge Actors
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
+
+      {/* Purge confirmation dialog */}
+      {purgeDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !purgeMutation.isPending && setPurgeDialogOpen(false)}
+          />
+          {/* Dialog */}
+          <div className="relative bg-card border border-border rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Purge actors without movies?</h2>
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete all actors who are not in any movie. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="default"
+                disabled={purgeMutation.isPending}
+                onClick={() => setPurgeDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="default"
+                disabled={purgeMutation.isPending}
+                onClick={() => purgeMutation.mutate()}
+              >
+                {purgeMutation.isPending ? 'Purging…' : 'Purge'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Page content — padded to clear navbar + sub-header */}
       <div
