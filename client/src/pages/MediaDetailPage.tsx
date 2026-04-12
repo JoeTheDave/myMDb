@@ -196,6 +196,7 @@ export function MediaDetailPage() {
           mediaId={media.id}
           cast={media.cast}
           isEditor={isEditor}
+          castSortOrder={media.castSortOrder}
         />
       </section>
 

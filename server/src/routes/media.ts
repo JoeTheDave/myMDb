@@ -164,16 +164,18 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         trailerUrl: true,
         createdAt: true,
         updatedAt: true,
+        castSortOrder: true,
         castRoles: {
           select: {
             id: true,
             characterName: true,
             roleImageUrl: true,
+            billingOrder: true,
             actor: {
               select: { id: true, name: true, imageUrl: true },
             },
           },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { billingOrder: 'asc' },
         },
       },
     })
@@ -194,6 +196,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       audienceRating: media.audienceRating,
       amazonPrimeUrl: media.amazonPrimeUrl,
       trailerUrl: media.trailerUrl,
+      castSortOrder: media.castSortOrder,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
       cast: media.castRoles,
@@ -769,6 +772,101 @@ router.post('/:id/trailer-lookup', authenticate, authorize('EDITOR'), async (req
   }
   logger.info({ logId: 'clear-saving-reel', mediaId: id, trailerUrl }, 'Trailer URL saved')
   res.json({ trailerUrl })
+})
+
+const CAST_SORT_ORDER_VALUES = ['BY_ACTOR', 'BY_ROLE', 'CUSTOM'] as const
+type CastSortOrderValue = (typeof CAST_SORT_ORDER_VALUES)[number]
+
+// PUT /api/media/:id/cast-sort
+router.put('/:id/cast-sort', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { castSortOrder } = req.body as { castSortOrder?: unknown }
+
+  if (!castSortOrder || !(CAST_SORT_ORDER_VALUES as readonly unknown[]).includes(castSortOrder)) {
+    res.status(400).json({ error: `Invalid castSortOrder. Must be one of: ${CAST_SORT_ORDER_VALUES.join(', ')}` })
+    return
+  }
+
+  try {
+    const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+    if (!media) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+
+    const updated = await prisma.media.update({
+      where: { id },
+      data: { castSortOrder: castSortOrder as CastSortOrderValue },
+      select: { castSortOrder: true },
+    })
+
+    logger.info({ logId: 'swift-setting-rank', mediaId: id, castSortOrder }, 'Cast sort order updated')
+    res.json({ castSortOrder: updated.castSortOrder })
+  } catch (err) {
+    logger.error({ logId: 'dark-setting-rank', err, mediaId: id }, 'Failed to update cast sort order')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// PUT /api/media/:id/cast-reorder
+router.put('/:id/cast-reorder', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { order } = req.body as { order?: unknown }
+
+  if (!Array.isArray(order) || order.length === 0) {
+    res.status(400).json({ error: 'Body must include a non-empty "order" array' })
+    return
+  }
+
+  for (const item of order) {
+    if (
+      typeof item !== 'object' || item === null ||
+      typeof (item as Record<string, unknown>)['id'] !== 'string' ||
+      typeof (item as Record<string, unknown>)['billingOrder'] !== 'number'
+    ) {
+      res.status(400).json({ error: 'Each item in "order" must have a string "id" and a number "billingOrder"' })
+      return
+    }
+  }
+
+  const orderItems = order as Array<{ id: string; billingOrder: number }>
+
+  try {
+    const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+    if (!media) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+
+    const existingRoles = await prisma.castRole.findMany({
+      where: { mediaId: id },
+      select: { id: true },
+    })
+    const existingIds = new Set(existingRoles.map(r => r.id))
+
+    for (const item of orderItems) {
+      if (!existingIds.has(item.id)) {
+        logger.warn({ logId: 'pale-rejecting-rank', mediaId: id, castRoleId: item.id }, 'Cast role id does not belong to this media')
+        res.status(400).json({ error: `Cast role id "${item.id}" does not belong to this media` })
+        return
+      }
+    }
+
+    await prisma.$transaction(
+      orderItems.map(item =>
+        prisma.castRole.update({
+          where: { id: item.id },
+          data: { billingOrder: item.billingOrder },
+        })
+      )
+    )
+
+    logger.info({ logId: 'keen-sorting-rank', mediaId: id, updated: orderItems.length }, 'Cast billing order updated')
+    res.json({ updated: orderItems.length })
+  } catch (err) {
+    logger.error({ logId: 'grim-sorting-rank', err, mediaId: id }, 'Failed to reorder cast')
+    res.status(500).json({ error: 'Internal server error' })
+  }
 })
 
 function isNotFoundError(err: unknown): boolean {

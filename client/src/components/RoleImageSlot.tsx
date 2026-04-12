@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Clipboard, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -34,12 +34,33 @@ interface RoleImageSlotProps {
 
 export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
   const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setUploading(true)
+    try {
+      const resized = await resizeIfNeeded(file)
+      const uploadFile = new File([resized], 'image.jpg', { type: 'image/jpeg' })
+      const { url } = await uploadApi.upload(uploadFile)
+      await onChange(url)
+    } catch {
+      toast.error('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function handlePaste() {
-    if (typeof navigator.clipboard === 'undefined') {
-      toast.error('Clipboard paste is not supported in this browser')
+    const canUseClipboard = typeof navigator.clipboard?.read === 'function'
+
+    if (!canUseClipboard) {
+      fileInputRef.current?.click()
       return
     }
+
     try {
       const items = await navigator.clipboard.read()
       const imageItem = items.find(item => item.types.some(t => t.startsWith('image/')))
@@ -75,6 +96,13 @@ export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
       )}
       onClick={value ? undefined : handlePaste}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
       {uploading ? (
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       ) : value ? (
@@ -89,8 +117,8 @@ export function RoleImageSlot({ value, onChange }: RoleImageSlotProps) {
           </div>
         </>
       ) : (
-        <div className="flex flex-col items-center gap-1 text-muted-foreground/50">
-          <Clipboard className="size-5 opacity-60" />
+        <div className="flex flex-col items-center gap-1 text-muted-foreground/70">
+          <Clipboard className="size-5 opacity-40" />
           <span className="text-[10px] leading-tight text-center px-1">Role Image</span>
         </div>
       )}
