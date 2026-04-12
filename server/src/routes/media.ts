@@ -678,11 +678,31 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
       headers: { Authorization: `Bearer ${tmdbToken}` },
       timeout: 15000,
     })
-    type ProvidersData = { results?: { US?: { link?: string; flatrate?: unknown[]; rent?: unknown[]; buy?: unknown[] } } }
+    type Provider = { provider_id: number; provider_name: string }
+    type ProvidersData = { results?: { US?: { link?: string; flatrate?: Provider[]; rent?: Provider[]; buy?: Provider[] } } }
     const providersData = providersResponse.data as ProvidersData
     const usRegion = providersData.results?.US
     if (usRegion && (usRegion.flatrate?.length || usRegion.rent?.length || usRegion.buy?.length)) {
-      amazonPrimeUrl = usRegion.link ?? null
+      const justwatchUrl = usRegion.link ?? null
+      if (justwatchUrl) {
+        try {
+          const jwResponse = await axios.get<string>(justwatchUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            timeout: 15000,
+          })
+          const asinMatch = jwResponse.data.match(/amazon\.com\/(?:dp|gp\/video\/detail)\/([A-Z0-9]{10})/i)
+          if (asinMatch?.[1]) {
+            amazonPrimeUrl = `https://www.amazon.com/gp/video/detail/${asinMatch[1]}`
+            logger.info({ logId: 'swift-extracting-asin', mediaId: id, asin: asinMatch[1] }, 'Extracted Amazon ASIN from JustWatch page')
+          } else {
+            logger.warn({ logId: 'pale-missing-asin', mediaId: id, justwatchUrl }, 'No Amazon ASIN found in JustWatch HTML — falling back to JustWatch URL')
+            amazonPrimeUrl = justwatchUrl
+          }
+        } catch (err) {
+          logger.warn({ logId: 'grey-fetching-justwatch', err, mediaId: id }, 'Failed to fetch JustWatch page — falling back to JustWatch URL')
+          amazonPrimeUrl = justwatchUrl
+        }
+      }
     }
   } catch (err) {
     logger.error({ logId: 'blunt-searching-prime', err, mediaId: id }, 'Failed to fetch TMDb watch providers for Amazon lookup')

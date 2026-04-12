@@ -523,7 +523,31 @@ describe('POST /api/media/:id/amazon-lookup', () => {
     expect(res.body.amazonPrimeUrl).toBeNull()
   })
 
-  it('returns the JustWatch URL and saves it on happy path for EDITOR', async () => {
+  it('extracts Amazon ASIN from JustWatch HTML and returns gp/video/detail URL on happy path for EDITOR', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Inception' })
+    const justWatchUrl = 'https://www.justwatch.com/us/movie/inception'
+    const fakeHtml = `<html><body><a href="https://www.amazon.com/dp/B003ZSPK7M?tag=justwatch09-20">Buy on Amazon</a></body></html>`
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(27205))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({
+      link: justWatchUrl,
+      flatrate: [{ provider_id: 9, provider_name: 'Amazon Prime Video' }],
+    }))
+    mockAxiosGet.mockResolvedValueOnce({ data: fakeHtml })
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/amazon-lookup`)
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/gp/video/detail/B003ZSPK7M')
+
+    const updated = await prisma.media.findUnique({ where: { id: media.id }, select: { amazonPrimeUrl: true } })
+    expect(updated?.amazonPrimeUrl).toBe('https://www.amazon.com/gp/video/detail/B003ZSPK7M')
+  })
+
+  it('falls back to JustWatch URL when JustWatch page fetch fails', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
     const media = await createMedia({ title: 'Inception' })
@@ -533,6 +557,7 @@ describe('POST /api/media/:id/amazon-lookup', () => {
       link: justWatchUrl,
       flatrate: [{ provider_id: 9, provider_name: 'Amazon Prime Video' }],
     }))
+    mockAxiosGet.mockRejectedValueOnce(new Error('JustWatch fetch failed'))
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
@@ -540,28 +565,47 @@ describe('POST /api/media/:id/amazon-lookup', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.amazonPrimeUrl).toBe(justWatchUrl)
-
-    const updated = await prisma.media.findUnique({ where: { id: media.id }, select: { amazonPrimeUrl: true } })
-    expect(updated?.amazonPrimeUrl).toBe(justWatchUrl)
   })
 
-  it('works for ADMIN role', async () => {
-    const admin = await createUser({ role: 'ADMIN' })
-    const token = makeToken(admin)
-    const media = await createMedia({ title: 'The Matrix' })
-    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(603))
+  it('falls back to JustWatch URL when no ASIN found in JustWatch HTML', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia({ title: 'Inception' })
+    const justWatchUrl = 'https://www.justwatch.com/us/movie/inception'
+    const fakeHtml = `<html><body><p>No amazon links here</p></body></html>`
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(27205))
     mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({
-      link: 'https://www.justwatch.com/us/movie/the-matrix',
-      buy: [{ provider_id: 3, provider_name: 'Google Play Movies' }],
+      link: justWatchUrl,
+      flatrate: [{ provider_id: 9, provider_name: 'Amazon Prime Video' }],
     }))
+    mockAxiosGet.mockResolvedValueOnce({ data: fakeHtml })
 
     const res = await request(app)
       .post(`/api/media/${media.id}/amazon-lookup`)
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.amazonPrimeUrl).not.toBeNull()
-    expect(res.body.amazonPrimeUrl).toContain('justwatch.com')
+    expect(res.body.amazonPrimeUrl).toBe(justWatchUrl)
+  })
+
+  it('works for ADMIN role', async () => {
+    const admin = await createUser({ role: 'ADMIN' })
+    const token = makeToken(admin)
+    const media = await createMedia({ title: 'The Matrix' })
+    const fakeHtml = `<html><body><a href="https://www.amazon.com/dp/B07CF6WRWM?tag=justwatch09-20">Buy</a></body></html>`
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbSearchMovieResponse(603))
+    mockAxiosGet.mockResolvedValueOnce(makeTmdbProvidersResponse({
+      link: 'https://www.justwatch.com/us/movie/the-matrix',
+      buy: [{ provider_id: 3, provider_name: 'Google Play Movies' }],
+    }))
+    mockAxiosGet.mockResolvedValueOnce({ data: fakeHtml })
+
+    const res = await request(app)
+      .post(`/api/media/${media.id}/amazon-lookup`)
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.amazonPrimeUrl).toBe('https://www.amazon.com/gp/video/detail/B07CF6WRWM')
   })
 })
 
