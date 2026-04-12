@@ -26,6 +26,23 @@ export async function uploadToS3(file: Express.Multer.File, userId: string): Pro
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
 }
 
+export async function uploadBufferToS3(
+  buffer: Buffer,
+  contentType: string,
+  filename: string,
+): Promise<string> {
+  const key = `imports/${randomUUID()}-${filename}`
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    }),
+  )
+  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
+}
+
 export async function deleteS3Object(url: string): Promise<void> {
   try {
     // URL pattern: https://${bucket}.s3.${region}.amazonaws.com/${key}

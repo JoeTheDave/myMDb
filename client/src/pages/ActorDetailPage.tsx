@@ -12,19 +12,17 @@ import { useAuth } from '@/hooks/useAuth'
 import { RoleImageSlot } from '@/components/RoleImageSlot'
 import type { ActorFilmographyItem } from '@/lib/types'
 
-function formatFullDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+function formatUTCDate(date: string | Date): string {
+  const d = new Date(date)
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
 }
 
-function calcAge(birthdayIso: string, asOfIso?: string): number {
-  const birth = new Date(birthdayIso)
-  const asOf = asOfIso ? new Date(asOfIso) : new Date()
-  let age = asOf.getFullYear() - birth.getFullYear()
-  const hadBirthday =
-    asOf.getMonth() > birth.getMonth() ||
-    (asOf.getMonth() === birth.getMonth() && asOf.getDate() >= birth.getDate())
-  if (!hadBirthday) age -= 1
+function calcAge(birthday: string | Date, asOf?: string | Date): number {
+  const birth = new Date(birthday)
+  const ref = asOf ? new Date(asOf) : new Date()
+  let age = ref.getUTCFullYear() - birth.getUTCFullYear()
+  const monthDiff = ref.getUTCMonth() - birth.getUTCMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && ref.getUTCDate() < birth.getUTCDate())) age--
   return age
 }
 
@@ -32,10 +30,11 @@ interface FilmographyCardProps {
   item: ActorFilmographyItem
   isEditor: boolean
   actorId: string
+  actorName: string
   onUpdated: (mediaId: string) => void
 }
 
-function FilmographyCard({ item, isEditor, onUpdated }: FilmographyCardProps) {
+function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCardProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -116,6 +115,8 @@ function FilmographyCard({ item, isEditor, onUpdated }: FilmographyCardProps) {
             <RoleImageSlot
               value={item.roleImageUrl}
               onChange={handleRoleImageChange}
+              actorName={actorName}
+              characterName={item.characterName}
             />
           ) : item.roleImageUrl ? (
             <img
@@ -278,16 +279,17 @@ export function ActorDetailPage() {
             </div>
           </div>
 
-          {/* Born / died */}
+          {/* Born / died / age */}
           {actor.birthday && (
             <div className="text-muted-foreground text-sm space-y-0.5">
-              <p>
-                Born: {formatFullDate(actor.birthday)} ({calcAge(actor.birthday, actor.deathDay ?? undefined)})
-              </p>
+              <p>Born: {formatUTCDate(actor.birthday)}</p>
               {actor.deathDay && (
-                <p>
-                  Died: {formatFullDate(actor.deathDay)} ({calcAge(actor.birthday, actor.deathDay)})
-                </p>
+                <p>Died: {formatUTCDate(actor.deathDay)}</p>
+              )}
+              {actor.deathDay ? (
+                <p>Age at death: {calcAge(actor.birthday, actor.deathDay)}</p>
+              ) : (
+                <p>Age: {calcAge(actor.birthday)}</p>
               )}
             </div>
           )}
@@ -309,6 +311,7 @@ export function ActorDetailPage() {
                 item={item}
                 isEditor={isEditor}
                 actorId={actor.id}
+                actorName={actor.name}
                 onUpdated={handleFilmographyUpdated}
               />
             ))}

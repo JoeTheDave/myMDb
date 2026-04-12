@@ -100,8 +100,13 @@ export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps
 
       {/* Main image section — 50/50 split */}
       <div className="flex aspect-square">
-        {/* Left: actor image */}
-        <div className="flex-1 relative overflow-hidden bg-muted">
+        {/* Left: actor image — links to actor page */}
+        <Link
+          to={`/actors/${member.actor.id}`}
+          onClick={e => e.stopPropagation()}
+          className="flex-1 relative overflow-hidden bg-muted block"
+          tabIndex={-1}
+        >
           {member.actor.imageUrl ? (
             <img
               src={member.actor.imageUrl}
@@ -114,7 +119,7 @@ export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps
               <User className="size-8 opacity-30" />
             </div>
           )}
-        </div>
+        </Link>
 
         {/* Divider */}
         <div className="w-px bg-border shrink-0" />
@@ -125,6 +130,8 @@ export function CastCard({ member, isEditor, onUpdate, onRemove, dragHandleProps
             <RoleImageSlot
               value={member.roleImageUrl}
               onChange={handleRoleImageChange}
+              actorName={member.actor.name}
+              characterName={member.characterName}
             />
           ) : member.roleImageUrl ? (
             <img

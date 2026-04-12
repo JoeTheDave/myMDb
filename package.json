@@ -1,6 +1,6 @@
 {
   "name": "mymdb",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "scripts": {
     "kill-ports": "{ lsof -ti :3001 & lsof -ti :5173; } | xargs kill -9 2>/dev/null; true",
