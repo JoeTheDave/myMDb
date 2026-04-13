@@ -76,14 +76,10 @@ function buildCandidateUrls(title: string, releaseYear: number | null, mediaType
     // Try year-qualified URLs for both slug variants before falling back to bare slugs.
     // This avoids landing on a same-name film from a different year or era
     // (e.g. LOTR 1978 animated at /m/the_lord_of_the_rings vs the 2001 film at the full-slug URL).
-    // Also try year+1: RT sometimes assigns the following year in URLs for late-release films
-    // (e.g. Fury (2014) lives at /m/fury_2015).
     if (releaseYear) {
       pushMovie(`${shortSlug}_${releaseYear}`, urls)
-      pushMovie(`${shortSlug}_${releaseYear + 1}`, urls)
       if (fullSlug !== shortSlug) {
         pushMovie(`${fullSlug}_${releaseYear}`, urls)
-        pushMovie(`${fullSlug}_${releaseYear + 1}`, urls)
       }
     }
     pushMovie(shortSlug, urls)
