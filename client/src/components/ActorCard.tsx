@@ -32,6 +32,7 @@ export function ActorCard({ actor }: ActorCardProps) {
             src={actor.imageUrl}
             alt={actor.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            style={{ objectPosition: `${actor.imageFocalX ?? 50}% ${actor.imageFocalY ?? 50}%` }}
             loading="lazy"
           />
         ) : (

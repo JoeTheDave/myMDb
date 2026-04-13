@@ -9,7 +9,7 @@ interface CastCardProps {
   member: CastMemberDetail
   isEditor: boolean
   mediaTitle: string
-  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
+  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement> | undefined
   isDragging?: boolean | undefined
@@ -112,7 +112,8 @@ export function CastCard({ member, isEditor, mediaTitle, onUpdate, onRemove, dra
             <img
               src={member.actor.imageUrl}
               alt={member.actor.name}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `${member.actor.imageFocalX ?? 50}% ${member.actor.imageFocalY ?? 50}%` }}
               loading="lazy"
             />
           ) : (
@@ -134,12 +135,18 @@ export function CastCard({ member, isEditor, mediaTitle, onUpdate, onRemove, dra
               actorName={member.actor.name}
               characterName={member.characterName}
               mediaTitle={mediaTitle}
+              focalX={member.roleImageFocalX}
+              focalY={member.roleImageFocalY}
+              onFocalPointChange={async (x, y) => {
+                await onUpdate(member.id, { roleImageFocalX: x, roleImageFocalY: y })
+              }}
             />
           ) : member.roleImageUrl ? (
             <img
               src={member.roleImageUrl}
               alt={`${member.actor.name} as ${member.characterName ?? ''}`}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `${member.roleImageFocalX ?? 50}% ${member.roleImageFocalY ?? 50}%` }}
               loading="lazy"
             />
           ) : (

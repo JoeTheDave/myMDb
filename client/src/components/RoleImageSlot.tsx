@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Clipboard, Loader2, Lightbulb, ExternalLink } from 'lucide-react'
+import { Clipboard, Loader2, Lightbulb, ExternalLink, X, Crosshair } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { uploadApi, imageApi } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { hasMinRole } from '@/lib/types'
+import { ImageActionMenu } from '@/components/ImageActionMenu'
+import { FocalPointEditor } from '@/components/FocalPointEditor'
 
 const MAX_WIDTH = 600
 const MAX_HEIGHT = 900
@@ -191,11 +193,24 @@ interface RoleImageSlotProps {
   actorName: string
   characterName: string | null
   mediaTitle: string
+  focalX?: number | null | undefined
+  focalY?: number | null | undefined
+  onFocalPointChange?: (x: number, y: number) => Promise<void>
 }
 
-export function RoleImageSlot({ value, onChange, actorName, characterName, mediaTitle }: RoleImageSlotProps) {
+export function RoleImageSlot({
+  value,
+  onChange,
+  actorName,
+  characterName,
+  mediaTitle,
+  focalX,
+  focalY,
+  onFocalPointChange,
+}: RoleImageSlotProps) {
   const [uploading, setUploading] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [focalEditorOpen, setFocalEditorOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
@@ -267,6 +282,11 @@ export function RoleImageSlot({ value, onChange, actorName, characterName, media
     }
   }
 
+  function openGoogleImages() {
+    const q = [actorName, mediaTitle, characterName].filter(Boolean).join(' ')
+    window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <>
       <div
@@ -288,14 +308,23 @@ export function RoleImageSlot({ value, onChange, actorName, characterName, media
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
         ) : value ? (
           <>
-            <img src={value} alt="" className="w-full h-full object-cover object-top" />
-            {/* Hover overlay to replace */}
-            <div
-              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity bg-black/50 cursor-pointer"
-              onClick={handlePaste}
-            >
-              <Clipboard className="size-5 text-white opacity-80" />
-            </div>
+            <img
+              src={value}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `${focalX ?? 50}% ${focalY ?? 50}%` }}
+            />
+            {focalEditorOpen && (
+              <FocalPointEditor
+                initialX={focalX ?? 50}
+                initialY={focalY ?? 50}
+                onConfirm={(x, y) => {
+                  void onFocalPointChange?.(x, y)
+                  setFocalEditorOpen(false)
+                }}
+                onCancel={() => setFocalEditorOpen(false)}
+              />
+            )}
           </>
         ) : (
           <div className="flex flex-col items-center gap-1 text-muted-foreground/70">
@@ -304,44 +333,60 @@ export function RoleImageSlot({ value, onChange, actorName, characterName, media
           </div>
         )}
 
-        {/* Google Image Search button — EDITOR+ only, bottom-right area, visible on hover */}
+        {/* Speed dial menu — EDITOR+ only */}
         {isEditor && (
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation()
-              const q = [actorName, mediaTitle, characterName].filter(Boolean).join(' ')
-              window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`, '_blank', 'noopener,noreferrer')
-            }}
-            className={cn(
-              'absolute bottom-1.5 right-8 z-10',
-              'size-6 rounded-full bg-black/60 text-white',
-              'flex items-center justify-center',
-              'opacity-0 group-hover/slot:opacity-100 transition-all duration-150',
-              'hover:scale-110 hover:brightness-125',
-            )}
-            aria-label="Search Google Images"
-          >
-            <ExternalLink className="size-3.5" />
-          </button>
-        )}
-
-        {/* Lightbulb button — EDITOR+ only, bottom-right corner, visible on hover */}
-        {isEditor && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); setSearchOpen(true) }}
-            className={cn(
-              'absolute bottom-1.5 right-1.5 z-10',
-              'size-6 rounded-full bg-black/60 text-white',
-              'flex items-center justify-center',
-              'opacity-0 group-hover/slot:opacity-100 transition-all duration-150',
-              'hover:scale-110 hover:brightness-125',
-            )}
-            aria-label="Search for image"
-          >
-            <Lightbulb className="size-3.5" />
-          </button>
+          value ? (
+            <ImageActionMenu
+              actions={[
+                {
+                  icon: <Clipboard className="size-3.5" />,
+                  label: 'Replace image',
+                  onClick: handlePaste,
+                },
+                {
+                  icon: <ExternalLink className="size-3.5" />,
+                  label: 'Google Images',
+                  onClick: openGoogleImages,
+                },
+                {
+                  icon: <Lightbulb className="size-3.5" />,
+                  label: 'Search library',
+                  onClick: () => setSearchOpen(true),
+                },
+                {
+                  icon: <Crosshair className="size-3.5" />,
+                  label: 'Set focal point',
+                  onClick: () => setFocalEditorOpen(true),
+                },
+                {
+                  icon: <X className="size-3.5" />,
+                  label: 'Remove',
+                  onClick: () => void onChange(undefined),
+                  destructive: true,
+                },
+              ]}
+            />
+          ) : (
+            <ImageActionMenu
+              actions={[
+                {
+                  icon: <Clipboard className="size-3.5" />,
+                  label: 'Add image',
+                  onClick: handlePaste,
+                },
+                {
+                  icon: <ExternalLink className="size-3.5" />,
+                  label: 'Google Images',
+                  onClick: openGoogleImages,
+                },
+                {
+                  icon: <Lightbulb className="size-3.5" />,
+                  label: 'Search library',
+                  onClick: () => setSearchOpen(true),
+                },
+              ]}
+            />
+          )
         )}
       </div>
 
