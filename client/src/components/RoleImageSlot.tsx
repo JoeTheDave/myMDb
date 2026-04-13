@@ -43,7 +43,6 @@ interface ImageSearchModalProps {
 
 function ImageSearchModal({ actorName, characterName, onSelect, onClose }: ImageSearchModalProps) {
   const [loading, setLoading] = useState(true)
-  const [source, setSource] = useState<'google' | 'bing' | 'brave' | null>(null)
   const [results, setResults] = useState<ImageSearchResult[]>([])
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
@@ -59,7 +58,6 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
     setHasMore(false)
     imageApi.searchImages(query, 1).then(data => {
       if (cancelled) return
-      setSource(data.source)
       setResults(data.results)
       setHasMore(data.hasMore)
     }).catch(() => {
@@ -136,11 +134,6 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
             </div>
           ) : (
             <>
-              {source && (
-                <p className="text-[11px] text-muted-foreground/60 mb-3">
-                  Results from {source === 'google' ? 'Google' : source === 'brave' ? 'Brave' : 'Bing'}
-                </p>
-              )}
               {results.length === 0 ? (
                 <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
                   No results found.

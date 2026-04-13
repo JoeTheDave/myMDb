@@ -24,7 +24,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com', 'imgs.search.brave.com', '*.bing.com', '*.mm.bing.net'],
+        'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com', 'imgs.search.brave.com'],
         'frame-src': ["'self'", 'https://www.youtube-nocookie.com'],
       },
     },

@@ -20,36 +20,8 @@ router.get('/search', authenticate, authorize('EDITOR'), async (req: Request, re
   const resolvedStart = isNaN(start) || start < 1 ? 1 : start
   const offset = resolvedStart - 1
 
-  const bingApiKey = process.env['BING_SEARCH_API_KEY']
   const braveApiKey = process.env['BRAVE_SEARCH_API_KEY']
 
-  // Try Bing first
-  if (bingApiKey) {
-    try {
-      type BingValue = { thumbnailUrl: string; contentUrl: string }
-      type BingResponse = { value?: BingValue[] }
-      const bingResponse = await axios.get<BingResponse>('https://api.bing.microsoft.com/v7.0/images/search', {
-        params: { q, count: 10, offset },
-        headers: { 'Ocp-Apim-Subscription-Key': bingApiKey },
-        timeout: 15000,
-      })
-      const values = bingResponse.data.value ?? []
-      const bingResults = values.map(v => ({ thumbnailUrl: v.thumbnailUrl, fullUrl: v.contentUrl }))
-      const hasMore = bingResults.length === 10 && offset === 0
-      logger.info({ logId: 'keen-searching-bing', q, count: bingResults.length, hasMore }, 'Bing image search complete')
-      res.json({ source: 'bing', results: bingResults, hasMore })
-      return
-    } catch (err) {
-      const status = (err as { response?: { status?: number } }).response?.status
-      if (status === 429) {
-        logger.warn({ logId: 'pale-quota-bing', q }, 'Bing monthly quota exceeded — falling back to Brave')
-      } else {
-        logger.warn({ logId: 'blunt-failing-bing', err, q }, 'Bing image search failed — falling back to Brave')
-      }
-    }
-  }
-
-  // Brave fallback
   if (braveApiKey) {
     try {
       type BraveResult = { thumbnail: { src: string }; properties: { url: string } }
@@ -67,20 +39,20 @@ router.get('/search', authenticate, authorize('EDITOR'), async (req: Request, re
       const braveResults = results.map(r => ({ thumbnailUrl: r.thumbnail.src, fullUrl: r.properties.url }))
       const hasMore = braveResults.length === 10 && offset === 0
       logger.info({ logId: 'wise-searching-brave', q, count: braveResults.length, hasMore }, 'Brave image search complete')
-      res.json({ source: 'brave', results: braveResults, hasMore })
+      res.json({ results: braveResults, hasMore })
       return
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response?.status
       if (status === 429 || status === 402) {
-        logger.warn({ logId: 'lean-quota-brave', q }, 'Brave monthly credits exhausted — all providers unavailable')
+        logger.warn({ logId: 'lean-quota-brave', q }, 'Brave monthly credits exhausted')
       } else {
         logger.error({ logId: 'dark-failing-brave', err, q }, 'Brave image search failed')
       }
     }
   }
 
-  logger.error({ logId: 'grim-failing-search', q }, 'All image search providers failed or unconfigured')
-  res.status(502).json({ error: 'Image search failed. All providers unavailable.' })
+  logger.error({ logId: 'grim-failing-search', q }, 'Image search failed or unconfigured')
+  res.status(502).json({ error: 'Image search unavailable.' })
 })
 
 // POST /api/images/download

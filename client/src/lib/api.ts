@@ -208,7 +208,7 @@ export const uploadApi = {
 
 export const imageApi = {
   searchImages: (query: string, start = 1) =>
-    apiFetch<{ source: 'google' | 'bing' | 'brave'; results: Array<{ thumbnailUrl: string; fullUrl: string }>; hasMore: boolean }>(
+    apiFetch<{ results: Array<{ thumbnailUrl: string; fullUrl: string }>; hasMore: boolean }>(
       `/api/images/search?q=${encodeURIComponent(query)}&start=${start}`,
     ),
   downloadImage: (url: string) =>
