@@ -8,15 +8,21 @@ import { logger } from '../lib/logger'
 
 const router = Router({ mergeParams: true })
 
+const focalPointSchema = z.number().finite().min(0).max(100)
+
 const createRoleSchema = z.object({
   characterName: z.string().min(1).optional(),
   actorId: z.string().min(1),
   roleImageUrl: z.string().url().optional(),
+  roleImageFocalX: focalPointSchema.optional(),
+  roleImageFocalY: focalPointSchema.optional(),
 })
 
 const updateRoleSchema = z.object({
   characterName: z.string().min(1).optional(),
   roleImageUrl: z.string().url().optional(),
+  roleImageFocalX: focalPointSchema.optional(),
+  roleImageFocalY: focalPointSchema.optional(),
 })
 
 function isS3Url(url: string | null | undefined): boolean {
@@ -35,7 +41,7 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request<{ id: st
     res.status(400).json({ error: parsed.error.flatten() })
     return
   }
-  const { characterName, actorId, roleImageUrl } = parsed.data
+  const { characterName, actorId, roleImageUrl, roleImageFocalX, roleImageFocalY } = parsed.data
   try {
     const media = await prisma.media.findUnique({ where: { id: mediaId }, select: { id: true } })
     if (!media) {
@@ -54,11 +60,15 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request<{ id: st
         actorId,
         mediaId,
         roleImageUrl: roleImageUrl ?? null,
+        roleImageFocalX: roleImageFocalX ?? null,
+        roleImageFocalY: roleImageFocalY ?? null,
       },
       select: {
         id: true,
         characterName: true,
         roleImageUrl: true,
+        roleImageFocalX: true,
+        roleImageFocalY: true,
         actorId: true,
         mediaId: true,
         createdAt: true,
@@ -103,11 +113,15 @@ rolesRouter.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{
       data: {
         ...(parsed.data.characterName !== undefined ? { characterName: parsed.data.characterName } : {}),
         ...(parsed.data.roleImageUrl !== undefined ? { roleImageUrl: parsed.data.roleImageUrl } : {}),
+        ...(parsed.data.roleImageFocalX !== undefined ? { roleImageFocalX: parsed.data.roleImageFocalX } : {}),
+        ...(parsed.data.roleImageFocalY !== undefined ? { roleImageFocalY: parsed.data.roleImageFocalY } : {}),
       },
       select: {
         id: true,
         characterName: true,
         roleImageUrl: true,
+        roleImageFocalX: true,
+        roleImageFocalY: true,
         actorId: true,
         mediaId: true,
         createdAt: true,
