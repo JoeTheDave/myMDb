@@ -80,7 +80,7 @@ export function TrailerButton({ mediaId, trailerUrl: initialTrailerUrl, isEditor
             <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
               <iframe
                 className="absolute inset-0 w-full h-full rounded-md"
-                src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+                src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
                 title={`${title} trailer`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
