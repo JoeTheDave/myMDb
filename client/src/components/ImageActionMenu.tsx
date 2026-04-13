@@ -13,9 +13,10 @@ interface ActionItem {
 interface ImageActionMenuProps {
   actions: ActionItem[]
   className?: string
+  triggerHoverClass?: string
 }
 
-export function ImageActionMenu({ actions, className }: ImageActionMenuProps) {
+export function ImageActionMenu({ actions, className, triggerHoverClass = 'group-hover:opacity-100' }: ImageActionMenuProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -57,7 +58,7 @@ export function ImageActionMenu({ actions, className }: ImageActionMenuProps) {
         }}
         className={cn(
           'size-6 rounded-full bg-black/60 text-white flex items-center justify-center',
-          'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity',
+          `opacity-0 ${triggerHoverClass} [@media(hover:none)]:opacity-100 transition-opacity`,
         )}
       >
         <MoreHorizontal className="size-3.5" />

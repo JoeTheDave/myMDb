@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
 import { deleteS3Object } from '../lib/s3'
 import { logger } from '../lib/logger'
+import { focalPointSchema } from '../lib/validation'
 
 const router = Router()
 
@@ -17,8 +18,6 @@ const listQuerySchema = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
 })
-
-const focalPointSchema = z.number().finite().min(0).max(100)
 
 const createActorSchema = z.object({
   name: z.string().min(1),
@@ -131,6 +130,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
             id: true,
             characterName: true,
             roleImageUrl: true,
+            roleImageFocalX: true,
+            roleImageFocalY: true,
             media: {
               select: {
                 id: true,
@@ -157,7 +158,7 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       imageFocalY: actor.imageFocalY,
       birthday: actor.birthday,
       deathDay: actor.deathDay,
-      filmography: actor.castRoles.map((role: { id: string; characterName: string | null; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
+      filmography: actor.castRoles.map((role: { id: string; characterName: string | null; roleImageUrl: string | null; roleImageFocalX: number | null; roleImageFocalY: number | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
         castRoleId: role.id,
         id: role.media.id,
         title: role.media.title,
@@ -166,6 +167,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         releaseYear: role.media.releaseYear,
         characterName: role.characterName,
         roleImageUrl: role.roleImageUrl,
+        roleImageFocalX: role.roleImageFocalX,
+        roleImageFocalY: role.roleImageFocalY,
       })),
     })
   } catch (err) {

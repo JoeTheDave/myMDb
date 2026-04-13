@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface FocalPointEditorProps {
   initialX: number
@@ -9,6 +9,12 @@ interface FocalPointEditorProps {
 
 export function FocalPointEditor({ initialX, initialY, onConfirm, onCancel }: FocalPointEditorProps) {
   const [pos, setPos] = useState({ x: initialX, y: initialY })
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect()

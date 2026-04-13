@@ -122,6 +122,8 @@ export interface CastRole {
   id: string
   characterName: string
   roleImageUrl?: string
+  roleImageFocalX?: number | null
+  roleImageFocalY?: number | null
   actorId: string
   mediaId: string
 }

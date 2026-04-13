@@ -337,6 +337,7 @@ export function RoleImageSlot({
         {isEditor && (
           value ? (
             <ImageActionMenu
+              triggerHoverClass="group-hover/slot:opacity-100"
               actions={[
                 {
                   icon: <Clipboard className="size-3.5" />,
@@ -368,6 +369,7 @@ export function RoleImageSlot({
             />
           ) : (
             <ImageActionMenu
+              triggerHoverClass="group-hover/slot:opacity-100"
               actions={[
                 {
                   icon: <Clipboard className="size-3.5" />,

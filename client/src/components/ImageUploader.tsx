@@ -166,7 +166,6 @@ export function ImageUploader({
                   icon: <Crosshair className="size-3.5" />,
                   label: 'Set focal point',
                   onClick: () => setFocalEditorOpen(true),
-                  disabled: !value,
                 },
                 {
                   icon: <X className="size-3.5" />,

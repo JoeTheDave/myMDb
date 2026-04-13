@@ -5,10 +5,9 @@ import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
 import { deleteS3Object } from '../lib/s3'
 import { logger } from '../lib/logger'
+import { focalPointSchema } from '../lib/validation'
 
 const router = Router({ mergeParams: true })
-
-const focalPointSchema = z.number().finite().min(0).max(100)
 
 const createRoleSchema = z.object({
   characterName: z.string().min(1).optional(),
