@@ -276,6 +276,86 @@ function extractScores(html: string): { criticRating: number | null; audienceRat
   return { criticRating, audienceRating }
 }
 
+async function tryPrivateApiFallback(
+  title: string,
+  releaseYear: number | null,
+  mediaType: 'MOVIE' | 'SHOW',
+): Promise<{ criticRating: number | null; audienceRating: number | null } | null> {
+  const searchUrl = `https://www.rottentomatoes.com/api/private/search?q=${encodeURIComponent(title)}&limit=10`
+  logger.info({ logId: 'swift-probing-private', title, searchUrl }, 'Trying RT private API fallback')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  let responseText: string
+  try {
+    const response = await fetch(searchUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+    })
+    if (response.status !== 200) return null
+    responseText = await response.text()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  type RtPrivateEntry = { name: string; year?: number; url: string }
+  let data: { movies?: RtPrivateEntry[]; tvSeries?: RtPrivateEntry[] }
+  try {
+    data = JSON.parse(responseText) as typeof data
+  } catch {
+    // HTML response (bot detection) or malformed JSON — fall through
+    return null
+  }
+
+  const entries = mediaType === 'MOVIE' ? (data.movies ?? []) : (data.tvSeries ?? [])
+  if (entries.length === 0) return null
+
+  const normalizedTitle = normalizeForComparison(title)
+  type ScoredEntry = { url: string; similarity: number; yearMatch: boolean }
+  const scored: ScoredEntry[] = []
+
+  for (const entry of entries) {
+    const normalizedName = normalizeForComparison(entry.name)
+    const maxLen = Math.max(normalizedName.length, normalizedTitle.length, 1)
+    const sim = 1 - levenshtein(normalizedName, normalizedTitle) / maxLen
+    if (sim < 0.55) continue
+    const yearMatch = releaseYear !== null && entry.year === releaseYear
+    scored.push({ url: entry.url, similarity: sim, yearMatch })
+  }
+
+  if (scored.length === 0) return null
+
+  scored.sort((a, b) => {
+    if (a.yearMatch !== b.yearMatch) return a.yearMatch ? -1 : 1
+    return b.similarity - a.similarity
+  })
+
+  for (const candidate of scored) {
+    const fullUrl = candidate.url.startsWith('http')
+      ? candidate.url
+      : `https://www.rottentomatoes.com${candidate.url}`
+    const html = await fetchPage(fullUrl)
+    if (!html) continue
+    const sim = titleSimilarity(html, title)
+    if (sim < 0.55) continue
+    const scores = extractScores(html)
+    if (scores.criticRating === null && scores.audienceRating === null) continue
+    logger.info(
+      { logId: 'gold-private-result', url: fullUrl, sim, criticRating: scores.criticRating, audienceRating: scores.audienceRating },
+      'RT private API fallback succeeded',
+    )
+    return scores
+  }
+
+  return null
+}
+
 async function trySearchFallback(
   title: string,
   releaseYear: number | null,
@@ -404,7 +484,11 @@ export async function fetchRTRatings(
     return scores
   }
 
-  // Search fallback
+  // Private API fallback
+  const privateResult = await tryPrivateApiFallback(title, releaseYear, mediaType)
+  if (privateResult) return privateResult
+
+  // HTML search fallback
   const fallback = await trySearchFallback(title, releaseYear)
   if (fallback) return fallback
 

@@ -43,9 +43,11 @@ interface ImageSearchModalProps {
 
 function ImageSearchModal({ actorName, characterName, onSelect, onClose }: ImageSearchModalProps) {
   const [loading, setLoading] = useState(true)
-  const [source, setSource] = useState<'google' | 'bing' | null>(null)
+  const [source, setSource] = useState<'google' | 'bing' | 'brave' | null>(null)
   const [results, setResults] = useState<ImageSearchResult[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const backdropRef = useRef<HTMLDivElement>(null)
 
   const query = characterName ? `${actorName} ${characterName}` : actorName
@@ -54,10 +56,12 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
     let cancelled = false
     setLoading(true)
     setError(null)
-    imageApi.searchImages(query).then(data => {
+    setHasMore(false)
+    imageApi.searchImages(query, 1).then(data => {
       if (cancelled) return
       setSource(data.source)
       setResults(data.results)
+      setHasMore(data.hasMore)
     }).catch(() => {
       if (cancelled) return
       setError('Failed to load image results.')
@@ -66,6 +70,18 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
     })
     return () => { cancelled = true }
   }, [query])
+
+  function handleLoadMore() {
+    setLoadingMore(true)
+    imageApi.searchImages(query, 11).then(data => {
+      setResults(prev => [...prev, ...data.results])
+      setHasMore(false)
+    }).catch(() => {
+      toast.error('Failed to load more results.')
+    }).finally(() => {
+      setLoadingMore(false)
+    })
+  }
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose()
@@ -122,7 +138,7 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
             <>
               {source && (
                 <p className="text-[11px] text-muted-foreground/60 mb-3">
-                  Results from {source === 'google' ? 'Google' : 'Bing'}
+                  Results from {source === 'google' ? 'Google' : source === 'brave' ? 'Brave' : 'Bing'}
                 </p>
               )}
               {results.length === 0 ? (
@@ -130,25 +146,43 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
                   No results found.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {results.map((result, i) => (
-                    <div
-                      key={i}
-                      data-image-cell
-                      className="aspect-square overflow-hidden rounded-lg cursor-pointer group/img bg-muted relative"
-                      onClick={() => onSelect(result.fullUrl)}
-                    >
-                      <img
-                        src={result.thumbnailUrl}
-                        alt=""
-                        className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105"
-                        onError={handleImageError}
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors duration-200" />
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {results.map((result, i) => (
+                      <div
+                        key={i}
+                        data-image-cell
+                        className="aspect-square overflow-hidden rounded-lg cursor-pointer group/img bg-muted relative"
+                        onClick={() => onSelect(result.fullUrl)}
+                      >
+                        <img
+                          src={result.thumbnailUrl}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105"
+                          onError={handleImageError}
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors duration-200" />
+                      </div>
+                    ))}
+                  </div>
+                  {hasMore && (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={handleLoadMore}
+                        disabled={loadingMore}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm rounded border border-border text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                      >
+                        {loadingMore ? (
+                          <><Loader2 className="size-3.5 animate-spin" /> Loading...</>
+                        ) : (
+                          'Load more'
+                        )}
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </>
           )}

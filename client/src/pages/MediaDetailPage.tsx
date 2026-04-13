@@ -1,8 +1,8 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2, Loader2, RefreshCw } from 'lucide-react'
+import { Edit2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { mediaApi, ApiError } from '@/lib/api'
+import { mediaApi } from '@/lib/api'
 import { formatContentRating, hasMinRole } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { CastSection } from '@/components/CastSection'
 import { AmazonPrimeSection } from '@/components/AmazonPrimeSection'
 import { TrailerButton } from '@/components/TrailerButton'
-import { criticIcon, audienceIcon } from '@/lib/rtIcons'
+import { RTRatingsSection } from '@/components/RTRatingsSection'
 
 function DetailSkeleton() {
   return (
@@ -46,20 +46,6 @@ export function MediaDetailPage() {
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
   const isAdmin = user?.role === 'ADMIN'
 
-  const fetchRatingsMutation = useMutation({
-    mutationFn: () => mediaApi.fetchRatings(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media', id] })
-    },
-    onError: (err) => {
-      if (err instanceof ApiError && err.status === 422) {
-        toast.error('Could not find this title on Rotten Tomatoes.')
-      } else {
-        toast.error('Failed to fetch ratings')
-      }
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: () => mediaApi.delete(id!),
     onSuccess: () => {
@@ -72,8 +58,6 @@ export function MediaDetailPage() {
 
   if (isLoading) return <DetailSkeleton />
   if (!media) return <div className="container mx-auto px-4 py-6 text-muted-foreground">Not found</div>
-
-  const hasRatings = media.criticRating !== null || media.audienceRating !== null
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -127,51 +111,12 @@ export function MediaDetailPage() {
           </div>
 
           {/* RT Ratings */}
-          {hasRatings ? (
-            <div className="flex gap-6 items-center">
-              {media.criticRating !== null && (
-                <div className="flex flex-col items-center gap-1">
-                  <img src={criticIcon(media.criticRating)} alt="Tomatometer" className="w-12 h-12" />
-                  <span className="text-xl font-bold">{media.criticRating}%</span>
-                  <span className="text-xs text-muted-foreground">Tomatometer</span>
-                </div>
-              )}
-              {media.audienceRating !== null && (
-                <div className="flex flex-col items-center gap-1">
-                  <img src={audienceIcon(media.audienceRating)} alt="Audience Score" className="w-12 h-12" />
-                  <span className="text-xl font-bold">{media.audienceRating}%</span>
-                  <span className="text-xs text-muted-foreground">Audience Score</span>
-                </div>
-              )}
-              {isEditor && (
-                <button
-                  onClick={() => fetchRatingsMutation.mutate()}
-                  disabled={fetchRatingsMutation.isPending}
-                  title="Refresh ratings"
-                  className="self-start mt-1 text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-30"
-                >
-                  <RefreshCw className={`size-3.5 ${fetchRatingsMutation.isPending ? 'animate-spin' : ''}`} />
-                </button>
-              )}
-            </div>
-          ) : isEditor ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fetchRatingsMutation.mutate()}
-              disabled={fetchRatingsMutation.isPending}
-            >
-              {fetchRatingsMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 mr-1.5 animate-spin" /> Fetching...
-                </>
-              ) : (
-                <>
-                  <img src="/rt-icons/fresh.svg" className="w-5 h-5 mr-1.5" alt="" /> Fetch Ratings
-                </>
-              )}
-            </Button>
-          ) : null}
+          <RTRatingsSection
+            mediaId={media.id}
+            criticRating={media.criticRating}
+            audienceRating={media.audienceRating}
+            isEditor={isEditor}
+          />
 
           {/* Amazon Prime Link */}
           <AmazonPrimeSection

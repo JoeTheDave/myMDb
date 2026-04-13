@@ -469,6 +469,41 @@ router.patch('/:id/fetch-ratings', authenticate, authorize('EDITOR'), async (req
   }
 })
 
+// PATCH /api/media/:id/ratings
+const updateRatingsSchema = z.object({
+  criticRating: z.number().int().min(0).max(100).nullable().optional(),
+  audienceRating: z.number().int().min(0).max(100).nullable().optional(),
+})
+
+router.patch('/:id/ratings', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  const parsed = updateRatingsSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() })
+    return
+  }
+  try {
+    const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+    if (!media) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+    const updated = await prisma.media.update({
+      where: { id },
+      data: {
+        ...(parsed.data.criticRating !== undefined ? { criticRating: parsed.data.criticRating } : {}),
+        ...(parsed.data.audienceRating !== undefined ? { audienceRating: parsed.data.audienceRating } : {}),
+      },
+      select: { criticRating: true, audienceRating: true },
+    })
+    logger.info({ logId: 'warm-setting-score', mediaId: id }, 'Manual ratings saved')
+    res.json({ criticRating: updated.criticRating, audienceRating: updated.audienceRating })
+  } catch (err) {
+    logger.error({ logId: 'cold-storing-score', err }, 'Failed to save manual ratings')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 // POST /api/media/:id/cast/import
 router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params

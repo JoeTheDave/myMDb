@@ -131,6 +131,12 @@ export const mediaApi = {
       body: JSON.stringify({ castSortOrder }),
       headers: { 'Content-Type': 'application/json' },
     }),
+  updateRatings: (id: string, data: { criticRating?: number | null; audienceRating?: number | null }) =>
+    apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/ratings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' },
+    }),
 }
 
 export const actorApi = {
@@ -201,9 +207,9 @@ export const uploadApi = {
 }
 
 export const imageApi = {
-  searchImages: (query: string) =>
-    apiFetch<{ source: 'google' | 'bing'; results: Array<{ thumbnailUrl: string; fullUrl: string }> }>(
-      `/api/images/search?q=${encodeURIComponent(query)}`,
+  searchImages: (query: string, start = 1) =>
+    apiFetch<{ source: 'google' | 'bing' | 'brave'; results: Array<{ thumbnailUrl: string; fullUrl: string }>; hasMore: boolean }>(
+      `/api/images/search?q=${encodeURIComponent(query)}&start=${start}`,
     ),
   downloadImage: (url: string) =>
     apiFetch<{ imageUrl: string }>('/api/images/download', {
