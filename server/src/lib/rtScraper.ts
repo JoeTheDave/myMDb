@@ -76,10 +76,14 @@ function buildCandidateUrls(title: string, releaseYear: number | null, mediaType
     // Try year-qualified URLs for both slug variants before falling back to bare slugs.
     // This avoids landing on a same-name film from a different year or era
     // (e.g. LOTR 1978 animated at /m/the_lord_of_the_rings vs the 2001 film at the full-slug URL).
+    // Also try year+1: RT sometimes assigns the following year in URLs for late-release films
+    // (e.g. Fury (2014) lives at /m/fury_2015).
     if (releaseYear) {
       pushMovie(`${shortSlug}_${releaseYear}`, urls)
+      pushMovie(`${shortSlug}_${releaseYear + 1}`, urls)
       if (fullSlug !== shortSlug) {
         pushMovie(`${fullSlug}_${releaseYear}`, urls)
+        pushMovie(`${fullSlug}_${releaseYear + 1}`, urls)
       }
     }
     pushMovie(shortSlug, urls)
@@ -419,7 +423,9 @@ async function trySearchFallback(
   for (const href of unique) {
     const fullUrl = href.startsWith('http') ? href : `https://www.rottentomatoes.com${href}`
     const slug = fullUrl.split('/').pop() ?? ''
-    const slugAsTitle = normalizeForComparison(slug.replace(/_/g, ' '))
+    // Strip trailing year suffix (e.g. "_2015") before comparing — RT often appends the year
+    // to disambiguate, but we're comparing against the stored title which has no year in it.
+    const slugAsTitle = normalizeForComparison(slug.replace(/_\d{4}$/, '').replace(/_/g, ' '))
     const normalizedInputTitle = normalizeForComparison(title)
     const sim = 1 - levenshtein(slugAsTitle, normalizedInputTitle) / Math.max(slugAsTitle.length, normalizedInputTitle.length, 1)
     const yearMatch = releaseYear !== null && fullUrl.includes(String(releaseYear))
