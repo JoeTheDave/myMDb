@@ -243,9 +243,11 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
             id: true,
             characterName: true,
             roleImageUrl: true,
+            roleImageFocalX: true,
+            roleImageFocalY: true,
             billingOrder: true,
             actor: {
-              select: { id: true, name: true, imageUrl: true },
+              select: { id: true, name: true, imageUrl: true, imageFocalX: true, imageFocalY: true },
             },
           },
           orderBy: { billingOrder: 'asc' },

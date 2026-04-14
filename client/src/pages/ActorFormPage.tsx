@@ -49,6 +49,8 @@ export function ActorFormPage() {
     if (existing) {
       const next: ActorFormData = { name: existing.name }
       if (existing.imageUrl) next.imageUrl = existing.imageUrl
+      if (existing.imageFocalX != null) next.imageFocalX = existing.imageFocalX
+      if (existing.imageFocalY != null) next.imageFocalY = existing.imageFocalY
       const birthday = existing.birthday ? existing.birthday.slice(0, 10) : undefined
       const deathDay = existing.deathDay ? existing.deathDay.slice(0, 10) : undefined
       if (birthday) next.birthday = birthday
@@ -175,6 +177,8 @@ export function ActorFormPage() {
               aspect="aspect-[3/4]"
               className="w-full"
               value={form.imageUrl}
+              focalX={form.imageFocalX}
+              focalY={form.imageFocalY}
               onChange={url => {
                 setForm(f => {
                   const next: ActorFormData = { ...f }
@@ -185,6 +189,9 @@ export function ActorFormPage() {
                   }
                   return next
                 })
+              }}
+              onFocalPointChange={(x, y) => {
+                setForm(f => ({ ...f, imageFocalX: x, imageFocalY: y }))
               }}
             />
           </div>

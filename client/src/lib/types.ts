@@ -49,11 +49,15 @@ export interface CastMemberDetail {
   id: string
   characterName: string | null
   roleImageUrl?: string
+  roleImageFocalX?: number | null
+  roleImageFocalY?: number | null
   billingOrder: number
   actor: {
     id: string
     name: string
     imageUrl?: string
+    imageFocalX?: number | null
+    imageFocalY?: number | null
   }
 }
 
@@ -76,6 +80,8 @@ export interface ActorListItem {
   id: string
   name: string
   imageUrl?: string
+  imageFocalX?: number | null
+  imageFocalY?: number | null
   birthday?: string
   deathDay?: string
 }
@@ -96,12 +102,16 @@ export interface ActorFilmographyItem {
   releaseYear?: number
   characterName: string | null
   roleImageUrl?: string
+  roleImageFocalX?: number | null
+  roleImageFocalY?: number | null
 }
 
 export interface ActorDetail {
   id: string
   name: string
   imageUrl?: string
+  imageFocalX?: number | null
+  imageFocalY?: number | null
   birthday?: string
   deathDay?: string
   bio?: string
@@ -112,6 +122,8 @@ export interface CastRole {
   id: string
   characterName: string
   roleImageUrl?: string
+  roleImageFocalX?: number | null
+  roleImageFocalY?: number | null
   actorId: string
   mediaId: string
 }
@@ -149,6 +161,8 @@ export interface MediaFormData {
 export interface ActorFormData {
   name: string
   imageUrl?: string | undefined
+  imageFocalX?: number | null | undefined
+  imageFocalY?: number | null | undefined
   birthday?: string | undefined
   deathDay?: string | undefined
 }
@@ -156,7 +170,9 @@ export interface ActorFormData {
 export interface CastRoleFormData {
   actorId: string
   characterName?: string | undefined
-  roleImageUrl?: string | undefined
+  roleImageUrl?: string | null | undefined
+  roleImageFocalX?: number | null | undefined
+  roleImageFocalY?: number | null | undefined
 }
 
 export const MOVIE_RATINGS: ContentRating[] = ['G', 'PG', 'PG_13', 'R', 'NC_17', 'NR']

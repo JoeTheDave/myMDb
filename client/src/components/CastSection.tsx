@@ -14,7 +14,7 @@ interface SortableCastCardProps {
   member: CastMemberDetail
   isEditor: boolean
   mediaTitle: string
-  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
+  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | null | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
 }
 
@@ -60,7 +60,7 @@ export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder
 
   async function handleUpdate(
     roleId: string,
-    data: { characterName?: string | undefined; roleImageUrl?: string | undefined },
+    data: { characterName?: string | undefined; roleImageUrl?: string | null | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null },
   ) {
     await castApi.update(roleId, data)
     await Promise.all([

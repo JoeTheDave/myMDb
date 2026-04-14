@@ -1,7 +1,9 @@
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
-import { Clipboard, X, Loader2 } from 'lucide-react'
+import { Clipboard, Trash2, Loader2, Crosshair } from 'lucide-react'
 import { uploadApi } from '@/lib/api'
+import { ImageActionMenu } from '@/components/ImageActionMenu'
+import { FocalPointEditor } from '@/components/FocalPointEditor'
 
 const MAX_WIDTH = 600
 const MAX_HEIGHT = 900
@@ -36,10 +38,24 @@ interface ImageUploaderProps {
   aspect?: string
   className?: string
   hideLabel?: boolean
+  focalX?: number | null | undefined
+  focalY?: number | null | undefined
+  onFocalPointChange?: (x: number, y: number) => void
 }
 
-export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]', className = 'max-w-[160px]', hideLabel = false }: ImageUploaderProps) {
+export function ImageUploader({
+  value,
+  onChange,
+  label,
+  aspect = 'aspect-[2/3]',
+  className = 'max-w-[160px]',
+  hideLabel = false,
+  focalX,
+  focalY,
+  onFocalPointChange,
+}: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
+  const [focalEditorOpen, setFocalEditorOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -112,32 +128,51 @@ export function ImageUploader({ value, onChange, label, aspect = 'aspect-[2/3]',
       />
 
       <div
-        className={`relative ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
-        onClick={value ? undefined : handlePaste}
+        className={`relative group ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
+        onClick={focalEditorOpen ? undefined : handlePaste}
       >
         {value ? (
           <>
-            <img src={value} alt="" className="w-full h-full object-cover" />
+            <img
+              src={value}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `${focalX ?? 50}% ${focalY ?? 50}%` }}
+            />
             {uploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/50">
                 <Loader2 className="size-6 animate-spin" />
               </div>
             )}
-            {/* Replace on click */}
-            <div
-              className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/50 cursor-pointer"
-              onClick={handlePaste}
-            >
-              <Clipboard className="size-6 text-white opacity-80" />
-            </div>
-            {/* Remove button */}
-            <button
-              type="button"
-              className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background transition-colors z-10"
-              onClick={e => { e.stopPropagation(); onChange(undefined) }}
-            >
-              <X className="size-3" />
-            </button>
+            {focalEditorOpen && (
+              <FocalPointEditor
+                imageSrc={value}
+                initialX={focalX ?? 50}
+                initialY={focalY ?? 50}
+                onConfirm={(x, y) => {
+                  onFocalPointChange?.(x, y)
+                  setFocalEditorOpen(false)
+                }}
+                onCancel={() => setFocalEditorOpen(false)}
+              />
+            )}
+            {!focalEditorOpen && (
+              <ImageActionMenu
+                actions={[
+                  {
+                    icon: <Crosshair className="size-3.5" />,
+                    label: 'Set focal point',
+                    onClick: () => setFocalEditorOpen(true),
+                  },
+                  {
+                    icon: <Trash2 className="size-3.5" />,
+                    label: 'Remove',
+                    onClick: () => onChange(undefined),
+                    destructive: true,
+                  },
+                ]}
+              />
+            )}
           </>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
