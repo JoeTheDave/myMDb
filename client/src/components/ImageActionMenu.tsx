@@ -103,7 +103,7 @@ export function ImageActionMenu({
               'size-6 rounded-full text-white flex items-center justify-center',
               'transition-all duration-200',
               'disabled:opacity-40 disabled:cursor-not-allowed',
-              action.destructive ? 'bg-destructive/80' : 'bg-black/60',
+              action.destructive ? 'bg-red-600/80' : 'bg-black/60',
             )}
           >
             {action.icon}

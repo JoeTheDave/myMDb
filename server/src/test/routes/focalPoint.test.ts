@@ -237,6 +237,26 @@ describe('GET /api/actors/:id — imageFocalX / imageFocalY in detail response',
   })
 })
 
+// ─── Cast role roleImageUrl null — PUT /api/roles/:id ───────────────────────
+
+describe('PUT /api/roles/:id — roleImageUrl: null', () => {
+  it('accepts roleImageUrl: null and clears the field', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+    const media = await createMedia()
+    const actor = await createActor()
+    const role = await createCastRole(media.id, actor.id)
+
+    const res = await request(app)
+      .put(`/api/roles/${role.id}`)
+      .set('Cookie', `token=${token}`)
+      .send({ roleImageUrl: null })
+
+    expect(res.status).toBe(200)
+    expect(res.body.roleImageUrl).toBeNull()
+  })
+})
+
 // ─── Cast role focal point — PUT /api/roles/:id ──────────────────────────────
 
 describe('PUT /api/roles/:id — roleImageFocalX / roleImageFocalY', () => {

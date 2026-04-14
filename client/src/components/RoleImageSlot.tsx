@@ -358,7 +358,14 @@ export function RoleImageSlot({
                 {
                   icon: <Trash2 className="size-3.5" />,
                   label: 'Remove',
-                  onClick: () => void onChange(null),
+                  onClick: () => {
+                    setUploading(true)
+                    onChange(null).catch(() => {
+                      toast.error('Failed to remove image')
+                    }).finally(() => {
+                      setUploading(false)
+                    })
+                  },
                   destructive: true,
                 },
               ] : []),
