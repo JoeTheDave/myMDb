@@ -19,7 +19,7 @@ const createRoleSchema = z.object({
 
 const updateRoleSchema = z.object({
   characterName: z.string().min(1).optional(),
-  roleImageUrl: z.string().url().optional(),
+  roleImageUrl: z.string().url().optional().nullable(),
   roleImageFocalX: focalPointSchema.optional(),
   roleImageFocalY: focalPointSchema.optional(),
 })

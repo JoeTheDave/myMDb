@@ -189,7 +189,7 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
 
 interface RoleImageSlotProps {
   value?: string | undefined
-  onChange: (url: string | undefined) => Promise<void>
+  onChange: (url: string | null) => Promise<void>
   actorName: string
   characterName: string | null
   mediaTitle: string
@@ -358,7 +358,7 @@ export function RoleImageSlot({
                 {
                   icon: <Trash2 className="size-3.5" />,
                   label: 'Remove',
-                  onClick: () => void onChange(undefined),
+                  onClick: () => void onChange(null),
                   destructive: true,
                 },
               ] : []),

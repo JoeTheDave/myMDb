@@ -9,7 +9,7 @@ interface CastCardProps {
   member: CastMemberDetail
   isEditor: boolean
   mediaTitle: string
-  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null }) => Promise<void>
+  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | null | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement> | undefined
   isDragging?: boolean | undefined
@@ -55,8 +55,8 @@ export function CastCard({ member, isEditor, mediaTitle, onUpdate, onRemove, dra
     }
   }
 
-  async function handleRoleImageChange(url: string | undefined) {
-    await onUpdate(member.id, { roleImageUrl: url ?? undefined })
+  async function handleRoleImageChange(url: string | null) {
+    await onUpdate(member.id, { roleImageUrl: url })
   }
 
   return (

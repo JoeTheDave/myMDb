@@ -77,8 +77,8 @@ function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCa
     }
   }
 
-  async function handleRoleImageChange(url: string | undefined) {
-    await castApi.update(item.castRoleId, { roleImageUrl: url ?? undefined })
+  async function handleRoleImageChange(url: string | null) {
+    await castApi.update(item.castRoleId, { roleImageUrl: url })
     onUpdated(item.id)
   }
 

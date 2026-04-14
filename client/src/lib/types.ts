@@ -170,7 +170,7 @@ export interface ActorFormData {
 export interface CastRoleFormData {
   actorId: string
   characterName?: string | undefined
-  roleImageUrl?: string | undefined
+  roleImageUrl?: string | null | undefined
   roleImageFocalX?: number | null | undefined
   roleImageFocalY?: number | null | undefined
 }
