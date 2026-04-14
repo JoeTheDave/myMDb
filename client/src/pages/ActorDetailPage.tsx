@@ -77,8 +77,13 @@ function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCa
     }
   }
 
-  async function handleRoleImageChange(url: string | undefined) {
-    await castApi.update(item.castRoleId, { roleImageUrl: url ?? undefined })
+  async function handleRoleImageChange(url: string | null) {
+    await castApi.update(item.castRoleId, { roleImageUrl: url })
+    onUpdated(item.id)
+  }
+
+  async function handleFocalPointChange(x: number, y: number) {
+    await castApi.update(item.castRoleId, { roleImageFocalX: x, roleImageFocalY: y })
     onUpdated(item.id)
   }
 
@@ -96,7 +101,7 @@ function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCa
             <img
               src={item.imageUrl}
               alt={item.title}
-              className="w-full h-full object-cover object-top group-hover/card:scale-[1.02] transition-transform duration-300"
+              className="w-full h-full object-cover group-hover/card:scale-[1.02] transition-transform duration-300"
               loading="lazy"
             />
           ) : (
@@ -118,12 +123,16 @@ function FilmographyCard({ item, isEditor, actorName, onUpdated }: FilmographyCa
               actorName={actorName}
               characterName={item.characterName}
               mediaTitle={item.title}
+              focalX={item.roleImageFocalX}
+              focalY={item.roleImageFocalY}
+              onFocalPointChange={handleFocalPointChange}
             />
           ) : item.roleImageUrl ? (
             <img
               src={item.roleImageUrl}
               alt={`${item.characterName ?? ''} in ${item.title}`}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `${item.roleImageFocalX ?? 50}% ${item.roleImageFocalY ?? 50}%` }}
               loading="lazy"
             />
           ) : (
@@ -250,7 +259,12 @@ export function ActorDetailPage() {
         <div className="md:w-48 shrink-0">
           <div className="aspect-[3/4] rounded-lg overflow-hidden bg-muted">
             {actor.imageUrl ? (
-              <img src={actor.imageUrl} alt={actor.name} className="w-full h-full object-cover" />
+              <img
+                src={actor.imageUrl}
+                alt={actor.name}
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `${actor.imageFocalX ?? 50}% ${actor.imageFocalY ?? 50}%` }}
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                 <svg className="size-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">

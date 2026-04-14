@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { MoreHorizontal, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { castApi, mediaApi } from '@/lib/api'
 import type { CastMemberDetail, CastSortOrder } from '@/lib/types'
 import { CastCard } from '@/components/CastCard'
@@ -14,7 +16,7 @@ interface SortableCastCardProps {
   member: CastMemberDetail
   isEditor: boolean
   mediaTitle: string
-  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | undefined }) => Promise<void>
+  onUpdate: (roleId: string, data: { characterName?: string | undefined; roleImageUrl?: string | null | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null }) => Promise<void>
   onRemove: (roleId: string) => Promise<void>
 }
 
@@ -43,12 +45,55 @@ interface CastSectionProps {
   cast: CastMemberDetail[]
   isEditor: boolean
   castSortOrder: CastSortOrder
+  autoTriggerImdbId?: string | null | undefined
+  onAutoImportDone?: (() => void) | undefined
 }
 
-export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder }: CastSectionProps) {
+export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder, autoTriggerImdbId, onAutoImportDone }: CastSectionProps) {
   const queryClient = useQueryClient()
   const [localCast, setLocalCast] = useState(cast)
   const [currentSort, setCurrentSort] = useState<CastSortOrder>(castSortOrder)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [purging, setPurging] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        closeMenu()
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeMenu()
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [menuOpen, closeMenu])
+
+  async function handlePurge() {
+    setMenuOpen(false)
+    setPurging(true)
+    try {
+      const result = await mediaApi.purgeNoImageCast(mediaId)
+      if (result.deleted === 0) {
+        toast.info('No actors removed')
+      } else {
+        toast.success(`Removed ${result.deleted} actor${result.deleted === 1 ? '' : 's'} with no role image`)
+      }
+      await queryClient.invalidateQueries({ queryKey: ['media', mediaId] })
+    } catch {
+      toast.error('Failed to purge actors')
+    } finally {
+      setPurging(false)
+    }
+  }
 
   useEffect(() => { setLocalCast(cast) }, [cast])
   useEffect(() => { setCurrentSort(castSortOrder) }, [castSortOrder])
@@ -60,7 +105,7 @@ export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder
 
   async function handleUpdate(
     roleId: string,
-    data: { characterName?: string | undefined; roleImageUrl?: string | undefined },
+    data: { characterName?: string | undefined; roleImageUrl?: string | null | undefined; roleImageFocalX?: number | null; roleImageFocalY?: number | null },
   ) {
     await castApi.update(roleId, data)
     await Promise.all([
@@ -134,7 +179,7 @@ export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder
     <div>
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <h2 className="text-xl font-semibold">Cast</h2>
-        {isEditor && <ImdbCastImport mediaId={mediaId} />}
+        {isEditor && <ImdbCastImport mediaId={mediaId} autoTriggerImdbId={autoTriggerImdbId} onAutoTriggerDone={onAutoImportDone} />}
         {isEditor && (
           <Select value={currentSort} onValueChange={value => { void handleSortChange(value) }} size="sm" className="min-w-[6.5rem]">
             {/* CUSTOM label item — hidden from the dropdown list, only used for display */}
@@ -142,6 +187,34 @@ export function CastSection({ mediaId, mediaTitle, cast, isEditor, castSortOrder
             <SelectItem value="BY_ACTOR">By Actor</SelectItem>
             <SelectItem value="BY_ROLE">By Role</SelectItem>
           </Select>
+        )}
+        {isEditor && (
+          <div className="relative ml-auto" ref={menuRef}>
+            <button
+              type="button"
+              title="Cast options"
+              disabled={purging}
+              onClick={() => setMenuOpen(prev => !prev)}
+              className="inline-flex items-center justify-center size-7 rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+            >
+              {purging ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <MoreHorizontal className="size-3.5" />
+              )}
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-30 min-w-[180px] rounded-lg border border-border bg-popover shadow-md py-1">
+                <button
+                  type="button"
+                  onClick={() => { void handlePurge() }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                >
+                  Purge non-relevant actors
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={event => { void handleDragEnd(event) }}>

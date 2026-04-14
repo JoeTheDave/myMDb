@@ -19,31 +19,28 @@ vi.mock('../../lib/s3', async (importOriginal) => {
 import { uploadBufferToS3 } from '../../lib/s3'
 const mockUploadBufferToS3 = vi.mocked(uploadBufferToS3)
 
-// Also mock axios.post for the download route since it uses axios.get
-// The download route uses axios.get with responseType: 'arraybuffer'
-
-function makeGoogleResponse(items: Array<{ link: string; image: { thumbnailLink: string } }>) {
-  return { data: { items } }
+function makeBraveResponse(results: Array<{ thumbnailUrl: string; fullUrl: string }>) {
+  return {
+    data: {
+      results: results.map(r => ({
+        thumbnail: { src: r.thumbnailUrl },
+        properties: { url: r.fullUrl },
+      })),
+    },
+  }
 }
 
-function makeBingResponse(values: Array<{ thumbnailUrl: string; contentUrl: string }>) {
-  return { data: { value: values } }
-}
-
-function makeGoogleItem(i: number) {
-  return { link: `https://example.com/image${i}.jpg`, image: { thumbnailLink: `https://thumb.example.com/t${i}.jpg` } }
-}
-
-function makeBingValue(i: number) {
-  return { thumbnailUrl: `https://bing-thumb.example.com/t${i}.jpg`, contentUrl: `https://bing-full.example.com/image${i}.jpg` }
+function makeBraveResult(i: number) {
+  return {
+    thumbnailUrl: `https://imgs.search.brave.com/thumb${i}.jpg`,
+    fullUrl: `https://example.com/image${i}.jpg`,
+  }
 }
 
 describe('GET /api/images/search', () => {
   beforeEach(() => {
     mockAxiosGet.mockReset()
-    process.env['GOOGLE_SEARCH_API_KEY'] = 'test-google-key'
-    process.env['GOOGLE_SEARCH_ENGINE_ID'] = 'test-cx'
-    process.env['BING_SEARCH_API_KEY'] = 'test-bing-key'
+    process.env['BRAVE_SEARCH_API_KEY'] = 'test-brave-key'
   })
 
   it('returns 401 when no auth is provided', async () => {
@@ -70,108 +67,61 @@ describe('GET /api/images/search', () => {
     expect(res.body.error).toBeDefined()
   })
 
-  it('returns Google results on happy path for EDITOR', async () => {
+  it('returns Brave results on happy path for EDITOR', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
 
-    const page1Items = Array.from({ length: 10 }, (_, i) => makeGoogleItem(i))
-    const page2Items = Array.from({ length: 10 }, (_, i) => makeGoogleItem(i + 10))
-    mockAxiosGet.mockResolvedValueOnce(makeGoogleResponse(page1Items))
-    mockAxiosGet.mockResolvedValueOnce(makeGoogleResponse(page2Items))
+    const items = Array.from({ length: 10 }, (_, i) => makeBraveResult(i))
+    mockAxiosGet.mockResolvedValueOnce(makeBraveResponse(items))
 
     const res = await request(app)
       .get('/api/images/search?q=Keanu+Reeves+Neo')
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.source).toBe('google')
     expect(Array.isArray(res.body.results)).toBe(true)
-    expect(res.body.results).toHaveLength(20)
+    expect(res.body.results).toHaveLength(10)
     expect(res.body.results[0]).toHaveProperty('thumbnailUrl')
     expect(res.body.results[0]).toHaveProperty('fullUrl')
+    expect(res.body.hasMore).toBe(true)
+  })
+
+  it('hasMore is false when fewer than 10 results returned', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+
+    const items = Array.from({ length: 5 }, (_, i) => makeBraveResult(i))
+    mockAxiosGet.mockResolvedValueOnce(makeBraveResponse(items))
+
+    const res = await request(app)
+      .get('/api/images/search?q=test')
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.results).toHaveLength(5)
+    expect(res.body.hasMore).toBe(false)
   })
 
   it('works for ADMIN role', async () => {
     const admin = await createUser({ role: 'ADMIN' })
     const token = makeToken(admin)
 
-    mockAxiosGet.mockResolvedValueOnce(makeGoogleResponse([makeGoogleItem(0)]))
-    mockAxiosGet.mockResolvedValueOnce(makeGoogleResponse([makeGoogleItem(1)]))
+    mockAxiosGet.mockResolvedValueOnce(makeBraveResponse([makeBraveResult(0)]))
 
     const res = await request(app)
       .get('/api/images/search?q=test')
       .set('Cookie', `token=${token}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.source).toBe('google')
+    expect(res.body.results).toHaveLength(1)
   })
 
-  it('falls back to Bing when Google returns 429 on the first request', async () => {
+  it('returns 502 when Brave returns 429', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
 
     const error429 = Object.assign(new Error('Rate limited'), { response: { status: 429 } })
     mockAxiosGet.mockRejectedValueOnce(error429)
-    // Bing fallback
-    const bingValues = Array.from({ length: 20 }, (_, i) => makeBingValue(i))
-    mockAxiosGet.mockResolvedValueOnce(makeBingResponse(bingValues))
-
-    const res = await request(app)
-      .get('/api/images/search?q=test')
-      .set('Cookie', `token=${token}`)
-
-    expect(res.status).toBe(200)
-    expect(res.body.source).toBe('bing')
-    expect(res.body.results).toHaveLength(20)
-    expect(res.body.results[0]).toHaveProperty('thumbnailUrl')
-    expect(res.body.results[0]).toHaveProperty('fullUrl')
-  })
-
-  it('falls back to Bing when Google returns 429 on the second request', async () => {
-    const editor = await createUser({ role: 'EDITOR' })
-    const token = makeToken(editor)
-
-    const page1Items = Array.from({ length: 10 }, (_, i) => makeGoogleItem(i))
-    mockAxiosGet.mockResolvedValueOnce(makeGoogleResponse(page1Items))
-    // Second Google request returns 429
-    const error429 = Object.assign(new Error('Rate limited'), { response: { status: 429 } })
-    mockAxiosGet.mockRejectedValueOnce(error429)
-    // Bing fallback
-    const bingValues = Array.from({ length: 20 }, (_, i) => makeBingValue(i))
-    mockAxiosGet.mockResolvedValueOnce(makeBingResponse(bingValues))
-
-    const res = await request(app)
-      .get('/api/images/search?q=test')
-      .set('Cookie', `token=${token}`)
-
-    expect(res.status).toBe(200)
-    expect(res.body.source).toBe('bing')
-    // Partial Google results should NOT be returned — full Bing results instead
-    expect(res.body.results).toHaveLength(20)
-  })
-
-  it('falls back to Bing when Google fails with a non-429 error', async () => {
-    const editor = await createUser({ role: 'EDITOR' })
-    const token = makeToken(editor)
-
-    mockAxiosGet.mockRejectedValueOnce(new Error('Network error'))
-    const bingValues = Array.from({ length: 5 }, (_, i) => makeBingValue(i))
-    mockAxiosGet.mockResolvedValueOnce(makeBingResponse(bingValues))
-
-    const res = await request(app)
-      .get('/api/images/search?q=test')
-      .set('Cookie', `token=${token}`)
-
-    expect(res.status).toBe(200)
-    expect(res.body.source).toBe('bing')
-  })
-
-  it('returns 502 when both Google and Bing fail', async () => {
-    const editor = await createUser({ role: 'EDITOR' })
-    const token = makeToken(editor)
-
-    mockAxiosGet.mockRejectedValueOnce(new Error('Google error'))
-    mockAxiosGet.mockRejectedValueOnce(new Error('Bing error'))
 
     const res = await request(app)
       .get('/api/images/search?q=test')
@@ -180,12 +130,24 @@ describe('GET /api/images/search', () => {
     expect(res.status).toBe(502)
   })
 
-  it('returns 502 when Google fails and Bing is not configured', async () => {
+  it('returns 502 when Brave fails with a network error', async () => {
     const editor = await createUser({ role: 'EDITOR' })
     const token = makeToken(editor)
 
-    delete process.env['BING_SEARCH_API_KEY']
-    mockAxiosGet.mockRejectedValueOnce(new Error('Google error'))
+    mockAxiosGet.mockRejectedValueOnce(new Error('Network error'))
+
+    const res = await request(app)
+      .get('/api/images/search?q=test')
+      .set('Cookie', `token=${token}`)
+
+    expect(res.status).toBe(502)
+  })
+
+  it('returns 502 when Brave is not configured', async () => {
+    const editor = await createUser({ role: 'EDITOR' })
+    const token = makeToken(editor)
+
+    delete process.env['BRAVE_SEARCH_API_KEY']
 
     const res = await request(app)
       .get('/api/images/search?q=test')

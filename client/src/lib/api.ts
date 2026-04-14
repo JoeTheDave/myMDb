@@ -100,7 +100,7 @@ export const mediaApi = {
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' },
     }),
-  update: (id: string, data: Partial<MediaFormData>) =>
+  update: (id: string, data: Omit<Partial<MediaFormData>, 'imageUrl'> & { imageUrl?: string | null | undefined }) =>
     apiFetch<MediaDetail>('/api/media/' + id, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -131,6 +131,20 @@ export const mediaApi = {
       body: JSON.stringify({ castSortOrder }),
       headers: { 'Content-Type': 'application/json' },
     }),
+  updateRatings: (id: string, data: { criticRating?: number | null; audienceRating?: number | null }) =>
+    apiFetch<{ criticRating: number | null; audienceRating: number | null }>('/api/media/' + id + '/ratings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  tmdbLookup: (title: string, year?: number) => {
+    const qs = toQueryString({ title, year })
+    return apiFetch<{ releaseYear: number | null; contentRating: string | null; imageUrl: string | null; imdbId: string | null }>(
+      '/api/media/tmdb-lookup?' + qs,
+    )
+  },
+  purgeNoImageCast: (id: string) =>
+    apiFetch<{ deleted: number }>('/api/media/' + id + '/cast/purge-no-image', { method: 'POST' }),
 }
 
 export const actorApi = {
@@ -201,9 +215,9 @@ export const uploadApi = {
 }
 
 export const imageApi = {
-  searchImages: (query: string) =>
-    apiFetch<{ source: 'google' | 'bing'; results: Array<{ thumbnailUrl: string; fullUrl: string }> }>(
-      `/api/images/search?q=${encodeURIComponent(query)}`,
+  searchImages: (query: string, start = 1) =>
+    apiFetch<{ results: Array<{ thumbnailUrl: string; fullUrl: string }>; hasMore: boolean }>(
+      `/api/images/search?q=${encodeURIComponent(query)}&start=${start}`,
     ),
   downloadImage: (url: string) =>
     apiFetch<{ imageUrl: string }>('/api/images/download', {

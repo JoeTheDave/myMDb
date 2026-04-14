@@ -8,14 +8,17 @@ import { Input } from '@/components/ui/input'
 
 interface ImdbCastImportProps {
   mediaId: string
+  autoTriggerImdbId?: string | null | undefined
+  onAutoTriggerDone?: (() => void) | undefined
 }
 
-export function ImdbCastImport({ mediaId }: ImdbCastImportProps) {
+export function ImdbCastImport({ mediaId, autoTriggerImdbId, onAutoTriggerDone }: ImdbCastImportProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [imdbId, setImdbId] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoTriggeredRef = useRef(false)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -40,12 +43,21 @@ export function ImdbCastImport({ mediaId }: ImdbCastImportProps) {
       setIsExpanded(false)
       setImdbId('')
       setValidationError(null)
+      onAutoTriggerDone?.()
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : 'Failed to import cast'
       toast.error(message)
+      onAutoTriggerDone?.()
     },
   })
+
+  useEffect(() => {
+    if (autoTriggerImdbId && !autoTriggeredRef.current && !importMutation.isPending) {
+      autoTriggeredRef.current = true
+      importMutation.mutate(autoTriggerImdbId)
+    }
+  }, [autoTriggerImdbId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSubmit() {
     const trimmed = imdbId.trim()

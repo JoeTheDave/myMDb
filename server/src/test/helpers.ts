@@ -46,7 +46,7 @@ export async function createActor(overrides: Partial<{ name: string }> = {}) {
 export async function createCastRole(
   mediaId: string,
   actorId: string,
-  overrides: Partial<{ characterName: string; billingOrder: number }> = {},
+  overrides: Partial<{ characterName: string; billingOrder: number; roleImageUrl: string | null }> = {},
 ) {
   return prisma.castRole.create({
     data: {
@@ -54,6 +54,7 @@ export async function createCastRole(
       actorId,
       characterName: overrides.characterName ?? null,
       billingOrder: overrides.billingOrder ?? 0,
+      roleImageUrl: overrides.roleImageUrl !== undefined ? overrides.roleImageUrl : null,
     },
   })
 }

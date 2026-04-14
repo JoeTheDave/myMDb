@@ -38,9 +38,13 @@ model Media {
   audienceRating Int?
   amazonPrimeUrl String?
   trailerUrl     String?
-  castSortOrder  CastSortOrder  @default(BY_ACTOR)
-  createdAt      DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  castSortOrder           CastSortOrder  @default(BY_ACTOR)
+  imdbId                  String?
+  rtAutoFetchDisabled     Boolean        @default(false)
+  amazonAutoFetchDisabled Boolean        @default(false)
+  actorAutoImportDisabled Boolean        @default(false)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 }
 
 enum MediaType {
@@ -70,21 +74,25 @@ enum CastSortOrder {
 }
 
 model Actor {
-  id        String     @id @default(uuid())
-  name      String
-  imageUrl  String?
-  birthday  DateTime?
-  deathDay  DateTime?
-  castRoles CastRole[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           String     @id @default(uuid())
+  name         String
+  imageUrl     String?
+  imageFocalX  Float?
+  imageFocalY  Float?
+  birthday     DateTime?
+  deathDay     DateTime?
+  castRoles    CastRole[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model CastRole {
-  id            String   @id @default(uuid())
-  characterName String?
-  roleImageUrl  String?
-  billingOrder  Int      @default(0)
+  id               String   @id @default(uuid())
+  characterName    String?
+  roleImageUrl     String?
+  roleImageFocalX  Float?
+  roleImageFocalY  Float?
+  billingOrder     Int      @default(0)
   actorId       String
   mediaId       String
   actor         Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)

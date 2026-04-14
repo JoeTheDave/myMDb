@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authorize'
 import { deleteS3Object } from '../lib/s3'
 import { logger } from '../lib/logger'
+import { focalPointSchema } from '../lib/validation'
 
 const router = Router()
 
@@ -23,6 +24,8 @@ const createActorSchema = z.object({
   imageUrl: z.string().url().optional(),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   deathDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  imageFocalX: focalPointSchema.optional(),
+  imageFocalY: focalPointSchema.optional(),
 })
 
 const updateActorSchema = createActorSchema.partial()
@@ -84,6 +87,8 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           id: true,
           name: true,
           imageUrl: true,
+          imageFocalX: true,
+          imageFocalY: true,
           birthday: true,
           deathDay: true,
           createdAt: true,
@@ -114,6 +119,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         id: true,
         name: true,
         imageUrl: true,
+        imageFocalX: true,
+        imageFocalY: true,
         birthday: true,
         deathDay: true,
         createdAt: true,
@@ -123,6 +130,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
             id: true,
             characterName: true,
             roleImageUrl: true,
+            roleImageFocalX: true,
+            roleImageFocalY: true,
             media: {
               select: {
                 id: true,
@@ -145,9 +154,11 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       id: actor.id,
       name: actor.name,
       imageUrl: actor.imageUrl,
+      imageFocalX: actor.imageFocalX,
+      imageFocalY: actor.imageFocalY,
       birthday: actor.birthday,
       deathDay: actor.deathDay,
-      filmography: actor.castRoles.map((role: { id: string; characterName: string | null; roleImageUrl: string | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
+      filmography: actor.castRoles.map((role: { id: string; characterName: string | null; roleImageUrl: string | null; roleImageFocalX: number | null; roleImageFocalY: number | null; media: { id: string; title: string; imageUrl: string | null; mediaType: string; releaseYear: number | null } }) => ({
         castRoleId: role.id,
         id: role.media.id,
         title: role.media.title,
@@ -156,6 +167,8 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         releaseYear: role.media.releaseYear,
         characterName: role.characterName,
         roleImageUrl: role.roleImageUrl,
+        roleImageFocalX: role.roleImageFocalX,
+        roleImageFocalY: role.roleImageFocalY,
       })),
     })
   } catch (err) {
@@ -178,11 +191,15 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Re
         imageUrl: parsed.data.imageUrl ?? null,
         birthday: parsed.data.birthday ? new Date(parsed.data.birthday) : null,
         deathDay: parsed.data.deathDay ? new Date(parsed.data.deathDay) : null,
+        imageFocalX: parsed.data.imageFocalX ?? null,
+        imageFocalY: parsed.data.imageFocalY ?? null,
       },
       select: {
         id: true,
         name: true,
         imageUrl: true,
+        imageFocalX: true,
+        imageFocalY: true,
         birthday: true,
         deathDay: true,
         createdAt: true,
@@ -227,11 +244,15 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: 
         ...(parsed.data.deathDay !== undefined
           ? { deathDay: parsed.data.deathDay ? new Date(parsed.data.deathDay) : null }
           : {}),
+        ...(parsed.data.imageFocalX !== undefined ? { imageFocalX: parsed.data.imageFocalX } : {}),
+        ...(parsed.data.imageFocalY !== undefined ? { imageFocalY: parsed.data.imageFocalY } : {}),
       },
       select: {
         id: true,
         name: true,
         imageUrl: true,
+        imageFocalX: true,
+        imageFocalY: true,
         birthday: true,
         deathDay: true,
         createdAt: true,
