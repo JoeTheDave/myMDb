@@ -430,6 +430,7 @@ router.post('/', authenticate, authorize('EDITOR'), async (req: Request, res: Re
         imageUrl: parsed.data.imageUrl ?? null,
         releaseYear: parsed.data.releaseYear ?? null,
         contentRating: parsed.data.contentRating ?? null,
+        imdbId: parsed.data.imdbId ?? null,
       },
       select: {
         id: true,
