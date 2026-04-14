@@ -295,7 +295,7 @@ export function RoleImageSlot({
           'bg-muted cursor-pointer group/slot',
           !value && 'hover:bg-muted/80 transition-colors',
         )}
-        onClick={value ? undefined : handlePaste}
+        onClick={focalEditorOpen ? undefined : handlePaste}
       >
         <input
           ref={fileInputRef}
@@ -335,25 +335,20 @@ export function RoleImageSlot({
 
         {/* Speed dial menu — EDITOR+ only */}
         {isEditor && (
-          value ? (
-            <ImageActionMenu
-              triggerHoverClass="group-hover/slot:opacity-100"
-              actions={[
-                {
-                  icon: <Clipboard className="size-3.5" />,
-                  label: 'Replace image',
-                  onClick: handlePaste,
-                },
-                {
-                  icon: <ExternalLink className="size-3.5" />,
-                  label: 'Google Images',
-                  onClick: openGoogleImages,
-                },
-                {
-                  icon: <Lightbulb className="size-3.5" />,
-                  label: 'Search library',
-                  onClick: () => setSearchOpen(true),
-                },
+          <ImageActionMenu
+            triggerHoverClass="group-hover/slot:opacity-100"
+            actions={[
+              {
+                icon: <ExternalLink className="size-3.5" />,
+                label: 'Google Images',
+                onClick: openGoogleImages,
+              },
+              {
+                icon: <Lightbulb className="size-3.5" />,
+                label: 'Search library',
+                onClick: () => setSearchOpen(true),
+              },
+              ...(value ? [
                 {
                   icon: <Crosshair className="size-3.5" />,
                   label: 'Set focal point',
@@ -365,30 +360,9 @@ export function RoleImageSlot({
                   onClick: () => void onChange(undefined),
                   destructive: true,
                 },
-              ]}
-            />
-          ) : (
-            <ImageActionMenu
-              triggerHoverClass="group-hover/slot:opacity-100"
-              actions={[
-                {
-                  icon: <Clipboard className="size-3.5" />,
-                  label: 'Add image',
-                  onClick: handlePaste,
-                },
-                {
-                  icon: <ExternalLink className="size-3.5" />,
-                  label: 'Google Images',
-                  onClick: openGoogleImages,
-                },
-                {
-                  icon: <Lightbulb className="size-3.5" />,
-                  label: 'Search library',
-                  onClick: () => setSearchOpen(true),
-                },
-              ]}
-            />
-          )
+              ] : []),
+            ]}
+          />
         )}
       </div>
 

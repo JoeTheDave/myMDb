@@ -129,7 +129,7 @@ export function ImageUploader({
 
       <div
         className={`relative group ${aspect} ${className} rounded-lg overflow-hidden border-2 border-dashed border-border bg-muted cursor-pointer hover:border-gold/60 transition-colors`}
-        onClick={value ? undefined : handlePaste}
+        onClick={focalEditorOpen ? undefined : handlePaste}
       >
         {value ? (
           <>
@@ -157,11 +157,6 @@ export function ImageUploader({
             )}
             <ImageActionMenu
               actions={[
-                {
-                  icon: <Clipboard className="size-3.5" />,
-                  label: 'Replace image',
-                  onClick: handlePaste,
-                },
                 {
                   icon: <Crosshair className="size-3.5" />,
                   label: 'Set focal point',

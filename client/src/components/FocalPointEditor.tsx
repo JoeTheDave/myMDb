@@ -17,6 +17,7 @@ export function FocalPointEditor({ initialX, initialY, onConfirm, onCancel }: Fo
   }, [onCancel])
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
+    e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
     const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100))
     const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
