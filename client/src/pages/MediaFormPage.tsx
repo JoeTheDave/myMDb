@@ -187,10 +187,10 @@ export function MediaFormPage() {
       const result = await mediaApi.tmdbLookup(form.title.trim(), form.releaseYear)
       setForm(f => {
         const next: MediaFormData = { ...f }
-        if (result.releaseYear != null) next.releaseYear = result.releaseYear
-        if (result.contentRating != null) next.contentRating = result.contentRating as ContentRating
-        if (result.imageUrl != null) next.imageUrl = result.imageUrl
-        if (result.imdbId != null) next.imdbId = result.imdbId
+        if (result.releaseYear != null && !f.releaseYear) next.releaseYear = result.releaseYear
+        if (result.contentRating != null && !f.contentRating) next.contentRating = result.contentRating as ContentRating
+        if (result.imageUrl != null && !f.imageUrl) next.imageUrl = result.imageUrl
+        if (result.imdbId != null && !f.imdbId) next.imdbId = result.imdbId
         return next
       })
     } catch {
@@ -242,7 +242,7 @@ export function MediaFormPage() {
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
                 />
-                {!isEdit && form.title.trim() && (
+                {form.title.trim() && (
                   <button
                     type="button"
                     title="Auto-fill from TMDB"
