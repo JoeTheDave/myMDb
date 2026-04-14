@@ -31,30 +31,6 @@ export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCa
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  // Global mouse handlers while dragging — captures events outside the container
-  useEffect(() => {
-    if (!dragging) return
-
-    function handleMouseMove(e: MouseEvent) {
-      const dx = e.clientX - lastPosRef.current.x
-      const dy = e.clientY - lastPosRef.current.y
-      lastPosRef.current = { x: e.clientX, y: e.clientY }
-      applyDelta(dx, dy)
-    }
-
-    function handleMouseUp() {
-      setDragging(false)
-      onConfirmRef.current(focalRef.current.x, focalRef.current.y)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [dragging])
-
   // Compute how many % one pixel of drag corresponds to, based on the actual
   // rendered image dimensions vs container dimensions (object-fit: cover math).
   function getSensitivity(): { x: number; y: number } {
@@ -83,6 +59,30 @@ export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCa
     setFocalX(newX)
     setFocalY(newY)
   }
+
+  // Global mouse handlers while dragging — captures events outside the container
+  useEffect(() => {
+    if (!dragging) return
+
+    function handleMouseMove(e: MouseEvent) {
+      const dx = e.clientX - lastPosRef.current.x
+      const dy = e.clientY - lastPosRef.current.y
+      lastPosRef.current = { x: e.clientX, y: e.clientY }
+      applyDelta(dx, dy)
+    }
+
+    function handleMouseUp() {
+      setDragging(false)
+      onConfirmRef.current(focalRef.current.x, focalRef.current.y)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [dragging])
 
   function handleMouseDown(e: React.MouseEvent) {
     // Only primary button
