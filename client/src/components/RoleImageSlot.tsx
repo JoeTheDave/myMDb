@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Clipboard, Loader2, Lightbulb, ExternalLink, X, Crosshair } from 'lucide-react'
+import { Clipboard, Loader2, Lightbulb, ExternalLink, Crosshair, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { uploadApi, imageApi } from '@/lib/api'
@@ -356,7 +356,7 @@ export function RoleImageSlot({
                   onClick: () => setFocalEditorOpen(true),
                 },
                 {
-                  icon: <X className="size-3.5" />,
+                  icon: <Trash2 className="size-3.5" />,
                   label: 'Remove',
                   onClick: () => void onChange(undefined),
                   destructive: true,

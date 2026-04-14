@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ActionItem {
@@ -120,12 +120,14 @@ export function ImageActionMenu({
           setOpen(prev => !prev)
         }}
         className={cn(
-          'relative size-6 rounded-full bg-black/60 text-white flex items-center justify-center',
+          'relative size-6 rounded-full text-white flex items-center justify-center',
           'transition-all duration-150',
-          open ? 'opacity-100' : cn('opacity-0', triggerHoverClass, '[@media(hover:none)]:opacity-100'),
+          open
+            ? 'bg-white/20 opacity-100'
+            : cn('bg-black/60 opacity-0', triggerHoverClass, '[@media(hover:none)]:opacity-100'),
         )}
       >
-        <MoreHorizontal className="size-3.5" />
+        {open ? <X className="size-3.5" /> : <MoreHorizontal className="size-3.5" />}
       </button>
     </div>
   )

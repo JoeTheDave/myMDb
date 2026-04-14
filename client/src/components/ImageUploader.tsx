@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
-import { Clipboard, X, Loader2, Crosshair } from 'lucide-react'
+import { Clipboard, Trash2, Loader2, Crosshair } from 'lucide-react'
 import { uploadApi } from '@/lib/api'
 import { ImageActionMenu } from '@/components/ImageActionMenu'
 import { FocalPointEditor } from '@/components/FocalPointEditor'
@@ -165,7 +165,7 @@ export function ImageUploader({
                     onClick: () => setFocalEditorOpen(true),
                   },
                   {
-                    icon: <X className="size-3.5" />,
+                    icon: <Trash2 className="size-3.5" />,
                     label: 'Remove',
                     onClick: () => onChange(undefined),
                     destructive: true,
