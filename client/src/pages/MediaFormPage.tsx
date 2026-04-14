@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { X, Loader2, Trash2, Plus } from 'lucide-react'
-import { mediaApi, actorApi, castApi } from '@/lib/api'
+import { X, Loader2, Trash2, Plus, Lightbulb, ExternalLink } from 'lucide-react'
+import { mediaApi, actorApi, castApi, imageApi } from '@/lib/api'
 import type { MediaFormData, CastRoleFormData, ContentRating, MediaType, ActorListItem } from '@/lib/types'
 import { MOVIE_RATINGS, TV_RATINGS, formatContentRating } from '@/lib/types'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectItem } from '@/components/ui/select'
 import { ImageUploader } from '@/components/ImageUploader'
+import { ImageSearchModal } from '@/components/RoleImageSlot'
 
 // Actor search autocomplete
 function ActorSearch({ onSelect }: { onSelect: (actor: ActorListItem) => void }) {
@@ -86,6 +87,8 @@ export function MediaFormPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof MediaFormData, string>>>({})
   const [castForm, setCastForm] = useState<CastFormState>({ actor: null, characterName: '' })
   const [addingCast, setAddingCast] = useState(false)
+  const [tmdbLoading, setTmdbLoading] = useState(false)
+  const [posterSearchOpen, setPosterSearchOpen] = useState(false)
 
   useEffect(() => {
     if (existing) {
@@ -96,6 +99,7 @@ export function MediaFormPage() {
       if (existing.imageUrl) next.imageUrl = existing.imageUrl
       if (existing.releaseYear) next.releaseYear = existing.releaseYear
       if (existing.contentRating) next.contentRating = existing.contentRating
+      if (existing.imdbId) next.imdbId = existing.imdbId
       setForm(next)
     }
   }, [existing])
@@ -176,6 +180,36 @@ export function MediaFormPage() {
     addCastMutation.mutate(data)
   }
 
+  async function handleTmdbLookup() {
+    if (!form.title.trim()) return
+    setTmdbLoading(true)
+    try {
+      const result = await mediaApi.tmdbLookup(form.title.trim(), form.releaseYear)
+      setForm(f => {
+        const next: MediaFormData = { ...f }
+        if (result.releaseYear != null && !f.releaseYear) next.releaseYear = result.releaseYear
+        if (result.contentRating != null && !f.contentRating) next.contentRating = result.contentRating as ContentRating
+        if (result.imageUrl != null && !f.imageUrl) next.imageUrl = result.imageUrl
+        if (result.imdbId != null && !f.imdbId) next.imdbId = result.imdbId
+        return next
+      })
+    } catch {
+      toast.error('Could not find movie on TMDB')
+    } finally {
+      setTmdbLoading(false)
+    }
+  }
+
+  async function handlePosterSearchSelect(fullUrl: string) {
+    setPosterSearchOpen(false)
+    try {
+      const { imageUrl } = await imageApi.downloadImage(fullUrl)
+      setForm(f => ({ ...f, imageUrl }))
+    } catch {
+      toast.error('Failed to download image')
+    }
+  }
+
   if (isEdit && isLoading) {
     return (
       <div className="container mx-auto px-4 py-6 animate-pulse space-y-4">
@@ -186,10 +220,12 @@ export function MediaFormPage() {
     )
   }
 
+  const posterQuery = `${form.title} movie poster`
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-2xl">
       <form onSubmit={handleSubmit}>
-        <div className="flex gap-8">
+        <div className="flex flex-col md:flex-row gap-8">
           {/* Left column: all form fields + actions */}
           <div className="flex-1 min-w-0 space-y-5">
             <h1 className="text-2xl font-bold">
@@ -199,12 +235,29 @@ export function MediaFormPage() {
             {/* Title */}
             <div className="space-y-0.5">
               <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="title"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  className={errors['title'] ? 'border-destructive focus-visible:ring-destructive/20' : ''}
+                />
+                {form.title.trim() && (
+                  <button
+                    type="button"
+                    title="Auto-fill from TMDB"
+                    onClick={() => { void handleTmdbLookup() }}
+                    disabled={tmdbLoading}
+                    className="inline-flex items-center justify-center size-9 rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 shrink-0"
+                  >
+                    {tmdbLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Lightbulb className="size-4" />
+                    )}
+                  </button>
+                )}
+              </div>
               {errors['title'] && <p className="text-xs text-destructive">{errors['title']}</p>}
             </div>
 
@@ -279,6 +332,28 @@ export function MediaFormPage() {
               </Select>
             </div>
 
+            {/* IMDb ID */}
+            <div className="space-y-0.5">
+              <Label htmlFor="imdbId">IMDb ID</Label>
+              <Input
+                id="imdbId"
+                value={form.imdbId ?? ''}
+                onChange={e => {
+                  const val = e.target.value
+                  setForm(f => {
+                    const next: MediaFormData = { ...f }
+                    if (val) {
+                      next.imdbId = val
+                    } else {
+                      delete next.imdbId
+                    }
+                    return next
+                  })
+                }}
+                placeholder="e.g. tt1234567"
+              />
+            </div>
+
             {/* Actions */}
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => navigate(-1)}>
@@ -313,10 +388,37 @@ export function MediaFormPage() {
                   return next
                 })
               }}
+              extraActions={[
+                {
+                  icon: <ExternalLink className="size-3.5" />,
+                  label: 'Google Images',
+                  onClick: () => window.open(
+                    `https://www.google.com/search?q=${encodeURIComponent(posterQuery)}&tbm=isch`,
+                    '_blank',
+                    'noopener,noreferrer',
+                  ),
+                },
+                {
+                  icon: <Lightbulb className="size-3.5" />,
+                  label: 'Smart Search',
+                  onClick: () => setPosterSearchOpen(true),
+                },
+              ]}
             />
           </div>
         </div>
       </form>
+
+      {/* Poster smart search modal */}
+      {posterSearchOpen && (
+        <ImageSearchModal
+          actorName={form.title}
+          characterName={null}
+          query={posterQuery}
+          onSelect={url => { void handlePosterSearchSelect(url) }}
+          onClose={() => setPosterSearchOpen(false)}
+        />
+      )}
 
       {/* Cast section (edit mode only) */}
       {isEdit && existing && (

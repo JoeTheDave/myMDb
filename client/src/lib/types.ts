@@ -74,6 +74,10 @@ export interface MediaDetail {
   audienceRating: number | null
   amazonPrimeUrl: string | null
   trailerUrl: string | null
+  imdbId: string | null
+  rtAutoFetchDisabled: boolean
+  amazonAutoFetchDisabled: boolean
+  actorAutoImportDisabled: boolean
 }
 
 export interface ActorListItem {
@@ -156,6 +160,7 @@ export interface MediaFormData {
   imageUrl?: string | undefined
   releaseYear?: number | undefined
   contentRating?: ContentRating | undefined
+  imdbId?: string | undefined
 }
 
 export interface ActorFormData {

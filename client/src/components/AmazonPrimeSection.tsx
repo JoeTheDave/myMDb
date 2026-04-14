@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Lightbulb, Loader2, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
@@ -8,13 +8,16 @@ interface AmazonPrimeSectionProps {
   mediaId: string
   amazonPrimeUrl: string | null
   isEditor: boolean
+  autoTrigger?: boolean
+  onAutoTriggerDone?: () => void
 }
 
-export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: AmazonPrimeSectionProps) {
+export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor, autoTrigger, onAutoTriggerDone }: AmazonPrimeSectionProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(amazonPrimeUrl)
   const [inputValue, setInputValue] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const queryClient = useQueryClient()
+  const autoTriggeredRef = useRef(false)
 
   const updateMutation = useMutation({
     mutationFn: (url: string | null) => mediaApi.updateAmazonPrimeUrl(mediaId, url),
@@ -39,12 +42,21 @@ export function AmazonPrimeSection({ mediaId, amazonPrimeUrl, isEditor }: Amazon
       } else {
         toast.info('No Amazon Prime listing found for this title.')
       }
+      onAutoTriggerDone?.()
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : 'Amazon lookup failed'
       toast.error(message)
+      onAutoTriggerDone?.()
     },
   })
+
+  useEffect(() => {
+    if (autoTrigger && !autoTriggeredRef.current && !lookupMutation.isPending) {
+      autoTriggeredRef.current = true
+      lookupMutation.mutate()
+    }
+  }, [autoTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleInputCommit() {
     const trimmed = inputValue.trim()

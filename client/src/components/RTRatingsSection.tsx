@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Pencil, RefreshCw, X, Check } from 'lucide-react'
 import { toast } from 'sonner'
@@ -11,15 +11,18 @@ interface RTRatingsSectionProps {
   criticRating: number | null
   audienceRating: number | null
   isEditor: boolean
+  autoTrigger?: boolean
+  onAutoTriggerDone?: () => void
 }
 
-export function RTRatingsSection({ mediaId, criticRating: initialCriticRating, audienceRating: initialAudienceRating, isEditor }: RTRatingsSectionProps) {
+export function RTRatingsSection({ mediaId, criticRating: initialCriticRating, audienceRating: initialAudienceRating, isEditor, autoTrigger, onAutoTriggerDone }: RTRatingsSectionProps) {
   const queryClient = useQueryClient()
   const [localCriticRating, setLocalCriticRating] = useState<number | null>(initialCriticRating)
   const [localAudienceRating, setLocalAudienceRating] = useState<number | null>(initialAudienceRating)
   const [isEditing, setIsEditing] = useState(false)
   const [editCritic, setEditCritic] = useState<string>('')
   const [editAudience, setEditAudience] = useState<string>('')
+  const autoTriggeredRef = useRef(false)
 
   const hasRatings = localCriticRating !== null || localAudienceRating !== null
 
@@ -29,6 +32,7 @@ export function RTRatingsSection({ mediaId, criticRating: initialCriticRating, a
       setLocalCriticRating(data.criticRating)
       setLocalAudienceRating(data.audienceRating)
       queryClient.invalidateQueries({ queryKey: ['media', mediaId] })
+      onAutoTriggerDone?.()
     },
     onError: (err) => {
       if (err instanceof ApiError && err.status === 422) {
@@ -36,8 +40,16 @@ export function RTRatingsSection({ mediaId, criticRating: initialCriticRating, a
       } else {
         toast.error('Failed to fetch ratings')
       }
+      onAutoTriggerDone?.()
     },
   })
+
+  useEffect(() => {
+    if (autoTrigger && !autoTriggeredRef.current && !fetchRatingsMutation.isPending) {
+      autoTriggeredRef.current = true
+      fetchRatingsMutation.mutate()
+    }
+  }, [autoTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateRatingsMutation = useMutation({
     mutationFn: (data: { criticRating?: number | null; audienceRating?: number | null }) =>

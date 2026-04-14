@@ -1,18 +1,20 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Trash2, ExternalLink, Lightbulb, Trash } from 'lucide-react'
 import { toast } from 'sonner'
-import { mediaApi } from '@/lib/api'
+import { mediaApi, imageApi } from '@/lib/api'
 import { formatContentRating, hasMinRole } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CastSection } from '@/components/CastSection'
 import { AmazonPrimeSection } from '@/components/AmazonPrimeSection'
 import { TrailerButton } from '@/components/TrailerButton'
 import { RTRatingsSection } from '@/components/RTRatingsSection'
+import { ImageActionMenu } from '@/components/ImageActionMenu'
+import { ImageSearchModal } from '@/components/RoleImageSlot'
 
 function DetailSkeleton() {
   return (
@@ -36,6 +38,12 @@ export function MediaDetailPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [posterSearchOpen, setPosterSearchOpen] = useState(false)
+
+  // Auto-enrichment trigger flags — set once after media loads for EDITOR+
+  const [autoTriggerRT, setAutoTriggerRT] = useState(false)
+  const [autoTriggerAmazon, setAutoTriggerAmazon] = useState(false)
+  const [autoTriggerImdbId, setAutoTriggerImdbId] = useState<string | null>(null)
 
   const { data: media, isLoading } = useQuery({
     queryKey: ['media', id],
@@ -45,6 +53,21 @@ export function MediaDetailPage() {
 
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
   const isAdmin = user?.role === 'ADMIN'
+
+  // Auto-enrichment: fire once after media loads for EDITOR+
+  useEffect(() => {
+    if (!media || !isEditor) return
+
+    if (!media.criticRating && !media.audienceRating && !media.rtAutoFetchDisabled) {
+      setAutoTriggerRT(true)
+    }
+    if (!media.amazonPrimeUrl && !media.amazonAutoFetchDisabled) {
+      setAutoTriggerAmazon(true)
+    }
+    if (media.cast.length === 0 && media.imdbId && !media.actorAutoImportDisabled) {
+      setAutoTriggerImdbId(media.imdbId)
+    }
+  }, [media?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteMutation = useMutation({
     mutationFn: () => mediaApi.delete(id!),
@@ -56,8 +79,31 @@ export function MediaDetailPage() {
     onError: () => toast.error('Failed to delete'),
   })
 
+  const removePosterMutation = useMutation({
+    mutationFn: () => mediaApi.update(id!, { imageUrl: null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media', id] })
+      toast.success('Poster removed')
+    },
+    onError: () => toast.error('Failed to remove poster'),
+  })
+
+  async function handlePosterSearchSelect(fullUrl: string) {
+    setPosterSearchOpen(false)
+    try {
+      const { imageUrl } = await imageApi.downloadImage(fullUrl)
+      await mediaApi.update(id!, { imageUrl })
+      queryClient.invalidateQueries({ queryKey: ['media', id] })
+      toast.success('Poster updated')
+    } catch {
+      toast.error('Failed to download image')
+    }
+  }
+
   if (isLoading) return <DetailSkeleton />
   if (!media) return <div className="container mx-auto px-4 py-6 text-muted-foreground">Not found</div>
+
+  const posterQuery = `${media.title} movie poster`
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -65,7 +111,7 @@ export function MediaDetailPage() {
       <div className="flex flex-col md:flex-row gap-8">
         {/* Poster */}
         <div className="md:w-64 shrink-0">
-          <div className="aspect-[2/3] rounded-lg overflow-hidden bg-muted">
+          <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted group">
             {media.imageUrl ? (
               <img src={media.imageUrl} alt={media.title} className="w-full h-full object-cover" />
             ) : (
@@ -75,14 +121,42 @@ export function MediaDetailPage() {
                 </svg>
               </div>
             )}
+            {isEditor && (
+              <ImageActionMenu
+                actions={[
+                  {
+                    icon: <ExternalLink className="size-3.5" />,
+                    label: 'Google Images',
+                    onClick: () => window.open(
+                      `https://www.google.com/search?q=${encodeURIComponent(posterQuery)}&tbm=isch`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    ),
+                  },
+                  {
+                    icon: <Lightbulb className="size-3.5" />,
+                    label: 'Smart Search',
+                    onClick: () => setPosterSearchOpen(true),
+                  },
+                  ...(media.imageUrl ? [
+                    {
+                      icon: <Trash className="size-3.5" />,
+                      label: 'Remove Image',
+                      onClick: () => removePosterMutation.mutate(),
+                      destructive: true,
+                    },
+                  ] : []),
+                ]}
+              />
+            )}
           </div>
         </div>
 
         {/* Details */}
         <div className="flex-1 space-y-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <h1 className="text-3xl font-bold">{media.title}</h1>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2">
               {isEditor && (
                 <Link to={`/movies/${media.id}/edit`}>
                   <Button variant="outline" size="sm">
@@ -116,6 +190,11 @@ export function MediaDetailPage() {
             criticRating={media.criticRating}
             audienceRating={media.audienceRating}
             isEditor={isEditor}
+            autoTrigger={autoTriggerRT}
+            onAutoTriggerDone={() => {
+              setAutoTriggerRT(false)
+              queryClient.invalidateQueries({ queryKey: ['media', id] })
+            }}
           />
 
           {/* Amazon Prime Link */}
@@ -123,6 +202,11 @@ export function MediaDetailPage() {
             mediaId={media.id}
             amazonPrimeUrl={media.amazonPrimeUrl}
             isEditor={isEditor}
+            autoTrigger={autoTriggerAmazon}
+            onAutoTriggerDone={() => {
+              setAutoTriggerAmazon(false)
+              queryClient.invalidateQueries({ queryKey: ['media', id] })
+            }}
           />
 
           {/* Trailer */}
@@ -143,8 +227,24 @@ export function MediaDetailPage() {
           cast={media.cast}
           isEditor={isEditor}
           castSortOrder={media.castSortOrder}
+          autoTriggerImdbId={autoTriggerImdbId}
+          onAutoImportDone={() => {
+            setAutoTriggerImdbId(null)
+            queryClient.invalidateQueries({ queryKey: ['media', id] })
+          }}
         />
       </section>
+
+      {/* Poster smart search modal */}
+      {posterSearchOpen && (
+        <ImageSearchModal
+          actorName={media.title}
+          characterName={null}
+          query={posterQuery}
+          onSelect={url => { void handlePosterSearchSelect(url) }}
+          onClose={() => setPosterSearchOpen(false)}
+        />
+      )}
 
       {/* Delete confirm dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

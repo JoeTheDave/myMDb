@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { X } from 'lucide-react'
 
 interface FocalPointEditorProps {
@@ -21,8 +21,11 @@ export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCa
   const focalRef = useRef({ x: initialX, y: initialY })
   const onConfirmRef = useRef(onConfirm)
   const onCancelRef = useRef(onCancel)
-  onConfirmRef.current = onConfirm
-  onCancelRef.current = onCancel
+  // Keep refs in sync with latest props without triggering re-renders
+  useLayoutEffect(() => {
+    onConfirmRef.current = onConfirm
+    onCancelRef.current = onCancel
+  })
 
   // Escape key cancels
   useEffect(() => {
@@ -30,6 +33,36 @@ export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCa
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
+
+  // Compute how many % one pixel of drag corresponds to, based on the actual
+  // rendered image dimensions vs container dimensions (object-fit: cover math).
+  // Wrapped in useCallback — deps are stable refs, no re-creation needed.
+  const getSensitivity = useCallback((): { x: number; y: number } => {
+    const container = containerRef.current
+    const img = imgRef.current
+    if (!container) return { x: 0.5, y: 0.5 }
+    const rect = container.getBoundingClientRect()
+    if (!img || !img.naturalWidth || !img.naturalHeight) {
+      return { x: 100 / rect.width, y: 100 / rect.height }
+    }
+    const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight)
+    const overflowX = img.naturalWidth * scale - rect.width
+    const overflowY = img.naturalHeight * scale - rect.height
+    return {
+      x: overflowX > 1 ? 100 / overflowX : 0,
+      y: overflowY > 1 ? 100 / overflowY : 0,
+    }
+  }, [])
+
+  // Dragging right → image moves right → you see more of the left side → focalX decreases
+  const applyDelta = useCallback((dx: number, dy: number) => {
+    const s = getSensitivity()
+    const newX = Math.min(100, Math.max(0, focalRef.current.x - dx * s.x))
+    const newY = Math.min(100, Math.max(0, focalRef.current.y - dy * s.y))
+    focalRef.current = { x: newX, y: newY }
+    setFocalX(newX)
+    setFocalY(newY)
+  }, [getSensitivity])
 
   // Global mouse handlers while dragging — captures events outside the container
   useEffect(() => {
@@ -53,36 +86,7 @@ export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCa
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [dragging])
-
-  // Compute how many % one pixel of drag corresponds to, based on the actual
-  // rendered image dimensions vs container dimensions (object-fit: cover math).
-  function getSensitivity(): { x: number; y: number } {
-    const container = containerRef.current
-    const img = imgRef.current
-    if (!container) return { x: 0.5, y: 0.5 }
-    const rect = container.getBoundingClientRect()
-    if (!img || !img.naturalWidth || !img.naturalHeight) {
-      return { x: 100 / rect.width, y: 100 / rect.height }
-    }
-    const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight)
-    const overflowX = img.naturalWidth * scale - rect.width
-    const overflowY = img.naturalHeight * scale - rect.height
-    return {
-      x: overflowX > 1 ? 100 / overflowX : 0,
-      y: overflowY > 1 ? 100 / overflowY : 0,
-    }
-  }
-
-  // Dragging right → image moves right → you see more of the left side → focalX decreases
-  function applyDelta(dx: number, dy: number) {
-    const s = getSensitivity()
-    const newX = Math.min(100, Math.max(0, focalRef.current.x - dx * s.x))
-    const newY = Math.min(100, Math.max(0, focalRef.current.y - dy * s.y))
-    focalRef.current = { x: newX, y: newY }
-    setFocalX(newX)
-    setFocalY(newY)
-  }
+  }, [dragging, applyDelta])
 
   function handleMouseDown(e: React.MouseEvent) {
     // Only primary button
