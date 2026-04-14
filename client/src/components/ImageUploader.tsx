@@ -5,6 +5,14 @@ import { uploadApi } from '@/lib/api'
 import { ImageActionMenu } from '@/components/ImageActionMenu'
 import { FocalPointEditor } from '@/components/FocalPointEditor'
 
+interface ActionItem {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  destructive?: boolean
+  disabled?: boolean
+}
+
 const MAX_WIDTH = 600
 const MAX_HEIGHT = 900
 
@@ -41,6 +49,7 @@ interface ImageUploaderProps {
   focalX?: number | null | undefined
   focalY?: number | null | undefined
   onFocalPointChange?: (x: number, y: number) => void
+  extraActions?: ActionItem[]
 }
 
 export function ImageUploader({
@@ -53,6 +62,7 @@ export function ImageUploader({
   focalX,
   focalY,
   onFocalPointChange,
+  extraActions,
 }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
   const [focalEditorOpen, setFocalEditorOpen] = useState(false)
@@ -159,6 +169,7 @@ export function ImageUploader({
             {!focalEditorOpen && (
               <ImageActionMenu
                 actions={[
+                  ...(extraActions ?? []),
                   {
                     icon: <Crosshair className="size-3.5" />,
                     label: 'Set focal point',

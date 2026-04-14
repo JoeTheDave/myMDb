@@ -100,7 +100,7 @@ export const mediaApi = {
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' },
     }),
-  update: (id: string, data: Partial<MediaFormData>) =>
+  update: (id: string, data: Omit<Partial<MediaFormData>, 'imageUrl'> & { imageUrl?: string | null | undefined }) =>
     apiFetch<MediaDetail>('/api/media/' + id, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -137,6 +137,14 @@ export const mediaApi = {
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' },
     }),
+  tmdbLookup: (title: string, year?: number) => {
+    const qs = toQueryString({ title, year })
+    return apiFetch<{ releaseYear: number | null; contentRating: string | null; imageUrl: string | null; imdbId: string | null }>(
+      '/api/media/tmdb-lookup?' + qs,
+    )
+  },
+  purgeNoImageCast: (id: string) =>
+    apiFetch<{ deleted: number }>('/api/media/' + id + '/cast/purge-no-image', { method: 'POST' }),
 }
 
 export const actorApi = {

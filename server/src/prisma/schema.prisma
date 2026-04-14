@@ -38,9 +38,13 @@ model Media {
   audienceRating Int?
   amazonPrimeUrl String?
   trailerUrl     String?
-  castSortOrder  CastSortOrder  @default(BY_ACTOR)
-  createdAt      DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  castSortOrder           CastSortOrder  @default(BY_ACTOR)
+  imdbId                  String?
+  rtAutoFetchDisabled     Boolean        @default(false)
+  amazonAutoFetchDisabled Boolean        @default(false)
+  actorAutoImportDisabled Boolean        @default(false)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 }
 
 enum MediaType {

@@ -23,9 +23,14 @@ const createMediaSchema = z.object({
   imageUrl: z.string().url().optional(),
   releaseYear: z.coerce.number().int().min(1888).max(2100).optional(),
   contentRating: contentRatingEnum.optional(),
+  imdbId: z.string().optional(),
 })
 
-const updateMediaSchema = createMediaSchema.partial()
+const updateMediaSchema = createMediaSchema.partial().extend({
+  rtAutoFetchDisabled: z.boolean().optional(),
+  amazonAutoFetchDisabled: z.boolean().optional(),
+  actorAutoImportDisabled: z.boolean().optional(),
+})
 
 function validateContentRating(mediaType: 'MOVIE' | 'SHOW', contentRating?: string): boolean {
   if (!contentRating) return true
@@ -195,6 +200,10 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           contentRating: true,
           criticRating: true,
           audienceRating: true,
+          imdbId: true,
+          rtAutoFetchDisabled: true,
+          amazonAutoFetchDisabled: true,
+          actorAutoImportDisabled: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -212,6 +221,117 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
     logger.error({ logId: 'amber-seeking-leaf', err }, 'Failed to list media')
     res.status(500).json({ error: 'Internal server error' })
   }
+})
+
+// GET /api/media/tmdb-lookup?title=:title&year=:year
+router.get('/tmdb-lookup', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
+  const { title, year } = req.query as { title?: string; year?: string }
+  if (!title) {
+    res.status(400).json({ error: 'Missing required query parameter: title' })
+    return
+  }
+
+  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
+  const headers = { Authorization: `Bearer ${tmdbToken}` }
+
+  // Step 1: Search TMDB for the movie
+  let tmdbMovieId: number
+  let posterPath: string | null = null
+  let rawReleaseDate: string | null = null
+
+  try {
+    const searchParams: Record<string, string> = { query: title, page: '1' }
+    if (year) searchParams['primary_release_year'] = year
+    const searchResponse = await axios.get('https://api.themoviedb.org/3/search/movie', {
+      params: searchParams,
+      headers,
+      timeout: 15000,
+    })
+    type TmdbSearchResult = { id: number; poster_path: string | null; release_date?: string }
+    type TmdbSearchData = { results?: TmdbSearchResult[] }
+    const searchData = searchResponse.data as TmdbSearchData
+    const first = searchData.results?.[0]
+    if (!first) {
+      logger.info({ logId: 'pale-missing-tmdb-lookup', title, year }, 'No results found on TMDB for title lookup')
+      res.status(404).json({ error: 'No results found on TMDB' })
+      return
+    }
+    tmdbMovieId = first.id
+    posterPath = first.poster_path ?? null
+    rawReleaseDate = first.release_date ?? null
+  } catch (err) {
+    logger.error({ logId: 'dark-searching-tmdb-lookup', err, title }, 'Failed to search TMDB for title lookup')
+    res.status(500).json({ error: 'Internal server error' })
+    return
+  }
+
+  // Step 2: Fetch full movie details with release_dates appended
+  let imdbId: string | null = null
+  let contentRating: string | null = null
+
+  try {
+    const detailResponse = await axios.get(`https://api.themoviedb.org/3/movie/${tmdbMovieId}`, {
+      params: { append_to_response: 'release_dates' },
+      headers,
+      timeout: 15000,
+    })
+    type ReleaseDateEntry = { type: number; certification: string }
+    type ReleaseDateResult = { iso_3166_1: string; release_dates: ReleaseDateEntry[] }
+    type TmdbMovieDetail = {
+      imdb_id?: string | null
+      release_date?: string
+      release_dates?: { results?: ReleaseDateResult[] }
+    }
+    const detail = detailResponse.data as TmdbMovieDetail
+    imdbId = detail.imdb_id ?? null
+    if (detail.release_date) rawReleaseDate = detail.release_date
+
+    // Extract US certification
+    const usEntry = detail.release_dates?.results?.find(r => r.iso_3166_1 === 'US')
+    if (usEntry) {
+      const theatrical = usEntry.release_dates.find(rd => rd.type === 3 && rd.certification)
+      const anyCert = usEntry.release_dates.find(rd => rd.certification)
+      const rawCert = theatrical?.certification ?? anyCert?.certification ?? null
+      if (rawCert) {
+        const certMap: Record<string, string> = {
+          'G': 'G',
+          'PG': 'PG',
+          'PG-13': 'PG_13',
+          'R': 'R',
+          'NC-17': 'NC_17',
+          'NR': 'NR',
+        }
+        contentRating = certMap[rawCert] ?? null
+      }
+    }
+  } catch (err) {
+    logger.warn({ logId: 'grey-fetching-tmdb-detail', err, tmdbMovieId }, 'Failed to fetch TMDB movie details — continuing with partial data')
+  }
+
+  // Step 3: Extract release year
+  const releaseYear = rawReleaseDate ? parseInt(rawReleaseDate.slice(0, 4), 10) || null : null
+
+  // Step 4: Download poster and upload to S3
+  let imageUrl: string | null = null
+  if (posterPath) {
+    try {
+      const imgResponse = await axios.get(`https://image.tmdb.org/t/p/w500${posterPath}`, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+      })
+      imageUrl = await uploadBufferToS3(
+        Buffer.from(imgResponse.data as ArrayBuffer),
+        'image/jpeg',
+        'movie-poster.jpg',
+      )
+      logger.info({ logId: 'swift-uploading-poster', tmdbMovieId }, 'TMDB poster uploaded to S3')
+    } catch (err) {
+      logger.warn({ logId: 'pale-uploading-poster', err, tmdbMovieId }, 'Failed to download/upload TMDB poster — returning without imageUrl')
+    }
+  }
+
+  logger.info({ logId: 'keen-lookup-tmdb', title, tmdbMovieId, releaseYear, imdbId }, 'TMDB lookup complete')
+  res.json({ releaseYear, contentRating, imageUrl, imdbId })
 })
 
 // GET /api/media/:id
@@ -235,6 +355,10 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
         audienceRating: true,
         amazonPrimeUrl: true,
         trailerUrl: true,
+        imdbId: true,
+        rtAutoFetchDisabled: true,
+        amazonAutoFetchDisabled: true,
+        actorAutoImportDisabled: true,
         createdAt: true,
         updatedAt: true,
         castSortOrder: true,
@@ -271,6 +395,10 @@ router.get('/:id', authenticate, async (req: Request<{ id: string }>, res: Respo
       audienceRating: media.audienceRating,
       amazonPrimeUrl: media.amazonPrimeUrl,
       trailerUrl: media.trailerUrl,
+      imdbId: media.imdbId,
+      rtAutoFetchDisabled: media.rtAutoFetchDisabled,
+      amazonAutoFetchDisabled: media.amazonAutoFetchDisabled,
+      actorAutoImportDisabled: media.actorAutoImportDisabled,
       castSortOrder: media.castSortOrder,
       createdAt: media.createdAt,
       updatedAt: media.updatedAt,
@@ -354,6 +482,10 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: 
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
         ...(parsed.data.releaseYear !== undefined ? { releaseYear: parsed.data.releaseYear } : {}),
         ...(parsed.data.contentRating !== undefined ? { contentRating: parsed.data.contentRating } : {}),
+        ...(parsed.data.imdbId !== undefined ? { imdbId: parsed.data.imdbId } : {}),
+        ...(parsed.data.rtAutoFetchDisabled !== undefined ? { rtAutoFetchDisabled: parsed.data.rtAutoFetchDisabled } : {}),
+        ...(parsed.data.amazonAutoFetchDisabled !== undefined ? { amazonAutoFetchDisabled: parsed.data.amazonAutoFetchDisabled } : {}),
+        ...(parsed.data.actorAutoImportDisabled !== undefined ? { actorAutoImportDisabled: parsed.data.actorAutoImportDisabled } : {}),
       },
       select: {
         id: true,
@@ -362,6 +494,10 @@ router.put('/:id', authenticate, authorize('EDITOR'), async (req: Request<{ id: 
         releaseYear: true,
         mediaType: true,
         contentRating: true,
+        imdbId: true,
+        rtAutoFetchDisabled: true,
+        amazonAutoFetchDisabled: true,
+        actorAutoImportDisabled: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -463,8 +599,20 @@ router.patch('/:id/fetch-ratings', authenticate, authorize('EDITOR'), async (req
     res.json({ criticRating: updated.criticRating, audienceRating: updated.audienceRating })
   } catch (err) {
     if (err instanceof RTNotFoundError) {
+      try {
+        await prisma.media.update({ where: { id }, data: { rtAutoFetchDisabled: true } })
+        logger.info({ logId: 'pale-disabling-rt', mediaId: id }, 'RT auto-fetch disabled after not-found error')
+      } catch (updateErr) {
+        logger.warn({ logId: 'grey-flagging-rt', err: updateErr, mediaId: id }, 'Failed to set rtAutoFetchDisabled after RTNotFoundError')
+      }
       res.status(422).json({ error: 'Could not find this title on Rotten Tomatoes.' })
       return
+    }
+    try {
+      await prisma.media.update({ where: { id }, data: { rtAutoFetchDisabled: true } })
+      logger.info({ logId: 'soft-disabling-rt', mediaId: id }, 'RT auto-fetch disabled after fetch error')
+    } catch (updateErr) {
+      logger.warn({ logId: 'dark-flagging-rt', err: updateErr, mediaId: id }, 'Failed to set rtAutoFetchDisabled after fetch error')
     }
     logger.error({ logId: 'dark-failing-scrape', err }, 'Failed to fetch RT ratings')
     res.status(500).json({ error: 'Internal server error' })
@@ -540,6 +688,12 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     })
   } catch (err) {
     logger.error({ logId: 'faint-pulling-tmdb', err, imdbId }, 'Failed to query TMDb /find for IMDB ID')
+    try {
+      await prisma.media.update({ where: { id }, data: { actorAutoImportDisabled: true } })
+      logger.info({ logId: 'pale-disabling-cast', mediaId: id }, 'Actor auto-import disabled after TMDb ID lookup failure')
+    } catch (updateErr) {
+      logger.warn({ logId: 'grey-flagging-cast', err: updateErr, mediaId: id }, 'Failed to set actorAutoImportDisabled after TMDb ID lookup failure')
+    }
     res.status(422).json({ error: 'Title not found on TMDb. Verify the IMDB ID.' })
     return
   }
@@ -560,6 +714,12 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     const rawCast = creditsData.cast ?? []
     if (rawCast.length === 0) {
       logger.warn({ logId: 'pale-missing-credits', imdbId, tmdbId }, 'No cast data returned from TMDb credits')
+      try {
+        await prisma.media.update({ where: { id }, data: { actorAutoImportDisabled: true } })
+        logger.info({ logId: 'soft-disabling-cast-empty', mediaId: id }, 'Actor auto-import disabled after empty credits response')
+      } catch (updateErr) {
+        logger.warn({ logId: 'grey-flagging-cast-empty', err: updateErr, mediaId: id }, 'Failed to set actorAutoImportDisabled after empty credits')
+      }
       res.status(422).json({ error: 'No cast data found on TMDb for this title.' })
       return
     }
@@ -571,6 +731,12 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
     }))
   } catch (err) {
     logger.error({ logId: 'blunt-breaking-credits', err, tmdbId }, 'Failed to fetch TMDb credits')
+    try {
+      await prisma.media.update({ where: { id }, data: { actorAutoImportDisabled: true } })
+      logger.info({ logId: 'dark-disabling-cast', mediaId: id }, 'Actor auto-import disabled after credits fetch failure')
+    } catch (updateErr) {
+      logger.warn({ logId: 'dark-flagging-cast', err: updateErr, mediaId: id }, 'Failed to set actorAutoImportDisabled after credits fetch failure')
+    }
     res.status(422).json({ error: 'No cast data found on TMDb for this title.' })
     return
   }
@@ -676,6 +842,24 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
   res.json({ imported, matched, created, skipped })
 })
 
+// POST /api/media/:id/cast/purge-no-image
+router.post('/:id/cast/purge-no-image', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const media = await prisma.media.findUnique({ where: { id }, select: { id: true } })
+    if (!media) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+    const result = await prisma.castRole.deleteMany({ where: { mediaId: id, roleImageUrl: null } })
+    logger.info({ logId: 'swift-purging-cast', mediaId: id, deleted: result.count }, 'Purged cast roles with no image')
+    res.json({ deleted: result.count })
+  } catch (err) {
+    logger.error({ logId: 'dark-purging-cast', err, mediaId: id }, 'Failed to purge no-image cast roles')
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 // POST /api/media/:id/amazon-lookup
 router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   const { id } = req.params
@@ -701,6 +885,12 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     tmdbId = await getTmdbId({ title: media.title, releaseYear: media.releaseYear, mediaType: media.mediaType as MediaType })
   } catch (err) {
     logger.error({ logId: 'grey-seeking-tmdb-prime', err, mediaId: id }, 'Failed to get TMDb ID for Amazon lookup')
+    try {
+      await prisma.media.update({ where: { id }, data: { amazonAutoFetchDisabled: true } })
+      logger.info({ logId: 'pale-disabling-amazon', mediaId: id }, 'Amazon auto-fetch disabled after TMDb lookup failure')
+    } catch (updateErr) {
+      logger.warn({ logId: 'grey-flagging-amazon', err: updateErr, mediaId: id }, 'Failed to set amazonAutoFetchDisabled after TMDb lookup failure')
+    }
     res.status(422).json({ error: 'Title not found on TMDb.' })
     return
   }
@@ -745,6 +935,12 @@ router.post('/:id/amazon-lookup', authenticate, authorize('EDITOR'), async (req:
     }
   } catch (err) {
     logger.error({ logId: 'blunt-searching-prime', err, mediaId: id }, 'Failed to fetch TMDb watch providers for Amazon lookup')
+    try {
+      await prisma.media.update({ where: { id }, data: { amazonAutoFetchDisabled: true } })
+      logger.info({ logId: 'soft-disabling-amazon', mediaId: id }, 'Amazon auto-fetch disabled after providers fetch failure')
+    } catch (updateErr) {
+      logger.warn({ logId: 'dark-flagging-amazon', err: updateErr, mediaId: id }, 'Failed to set amazonAutoFetchDisabled after providers fetch failure')
+    }
     res.status(500).json({ error: 'Internal server error' })
     return
   }

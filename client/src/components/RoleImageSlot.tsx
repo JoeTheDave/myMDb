@@ -39,11 +39,12 @@ interface ImageSearchResult {
 interface ImageSearchModalProps {
   actorName: string
   characterName: string | null
+  query?: string
   onSelect: (fullUrl: string) => void
   onClose: () => void
 }
 
-function ImageSearchModal({ actorName, characterName, onSelect, onClose }: ImageSearchModalProps) {
+export function ImageSearchModal({ actorName, characterName, query: queryProp, onSelect, onClose }: ImageSearchModalProps) {
   const [loading, setLoading] = useState(true)
   const [results, setResults] = useState<ImageSearchResult[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +52,7 @@ function ImageSearchModal({ actorName, characterName, onSelect, onClose }: Image
   const [loadingMore, setLoadingMore] = useState(false)
   const backdropRef = useRef<HTMLDivElement>(null)
 
-  const query = characterName ? `${actorName} ${characterName}` : actorName
+  const query = queryProp ?? (characterName ? `${actorName} ${characterName}` : actorName)
 
   useEffect(() => {
     let cancelled = false
