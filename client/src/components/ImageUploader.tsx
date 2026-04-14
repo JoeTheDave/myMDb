@@ -146,6 +146,7 @@ export function ImageUploader({
             )}
             {focalEditorOpen && (
               <FocalPointEditor
+                imageSrc={value}
                 initialX={focalX ?? 50}
                 initialY={focalY ?? 50}
                 onConfirm={(x, y) => {
@@ -155,21 +156,23 @@ export function ImageUploader({
                 onCancel={() => setFocalEditorOpen(false)}
               />
             )}
-            <ImageActionMenu
-              actions={[
-                {
-                  icon: <Crosshair className="size-3.5" />,
-                  label: 'Set focal point',
-                  onClick: () => setFocalEditorOpen(true),
-                },
-                {
-                  icon: <X className="size-3.5" />,
-                  label: 'Remove',
-                  onClick: () => onChange(undefined),
-                  destructive: true,
-                },
-              ]}
-            />
+            {!focalEditorOpen && (
+              <ImageActionMenu
+                actions={[
+                  {
+                    icon: <Crosshair className="size-3.5" />,
+                    label: 'Set focal point',
+                    onClick: () => setFocalEditorOpen(true),
+                  },
+                  {
+                    icon: <X className="size-3.5" />,
+                    label: 'Remove',
+                    onClick: () => onChange(undefined),
+                    destructive: true,
+                  },
+                ]}
+              />
+            )}
           </>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">

@@ -1,70 +1,152 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 
 interface FocalPointEditorProps {
+  imageSrc: string
   initialX: number
   initialY: number
   onConfirm: (x: number, y: number) => void
   onCancel: () => void
 }
 
-export function FocalPointEditor({ initialX, initialY, onConfirm, onCancel }: FocalPointEditorProps) {
-  const [pos, setPos] = useState({ x: initialX, y: initialY })
+export function FocalPointEditor({ imageSrc, initialX, initialY, onConfirm, onCancel }: FocalPointEditorProps) {
+  const [focalX, setFocalX] = useState(initialX)
+  const [focalY, setFocalY] = useState(initialY)
+  const [dragging, setDragging] = useState(false)
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const lastPosRef = useRef({ x: 0, y: 0 })
+  // Track position in a ref so global mouse handlers always have the latest value
+  const focalRef = useRef({ x: initialX, y: initialY })
+  const onConfirmRef = useRef(onConfirm)
+  const onCancelRef = useRef(onCancel)
+  onConfirmRef.current = onConfirm
+  onCancelRef.current = onCancel
+
+  // Escape key cancels
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancelRef.current() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  }, [])
 
-  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
+  // Global mouse handlers while dragging — captures events outside the container
+  useEffect(() => {
+    if (!dragging) return
+
+    function handleMouseMove(e: MouseEvent) {
+      const dx = e.clientX - lastPosRef.current.x
+      const dy = e.clientY - lastPosRef.current.y
+      lastPosRef.current = { x: e.clientX, y: e.clientY }
+      applyDelta(dx, dy)
+    }
+
+    function handleMouseUp() {
+      setDragging(false)
+      onConfirmRef.current(focalRef.current.x, focalRef.current.y)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [dragging])
+
+  // Compute how many % one pixel of drag corresponds to, based on the actual
+  // rendered image dimensions vs container dimensions (object-fit: cover math).
+  function getSensitivity(): { x: number; y: number } {
+    const container = containerRef.current
+    const img = imgRef.current
+    if (!container) return { x: 0.5, y: 0.5 }
+    const rect = container.getBoundingClientRect()
+    if (!img || !img.naturalWidth || !img.naturalHeight) {
+      return { x: 100 / rect.width, y: 100 / rect.height }
+    }
+    const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight)
+    const overflowX = img.naturalWidth * scale - rect.width
+    const overflowY = img.naturalHeight * scale - rect.height
+    return {
+      x: overflowX > 1 ? 100 / overflowX : 0,
+      y: overflowY > 1 ? 100 / overflowY : 0,
+    }
+  }
+
+  // Dragging right → image moves right → you see more of the left side → focalX decreases
+  function applyDelta(dx: number, dy: number) {
+    const s = getSensitivity()
+    const newX = Math.min(100, Math.max(0, focalRef.current.x - dx * s.x))
+    const newY = Math.min(100, Math.max(0, focalRef.current.y - dy * s.y))
+    focalRef.current = { x: newX, y: newY }
+    setFocalX(newX)
+    setFocalY(newY)
+  }
+
+  function handleMouseDown(e: React.MouseEvent) {
+    // Only primary button
+    if (e.button !== 0) return
+    e.preventDefault()
     e.stopPropagation()
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100))
-    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
-    setPos({ x, y })
+    lastPosRef.current = { x: e.clientX, y: e.clientY }
+    setDragging(true)
+  }
+
+  // Touch support
+  function handleTouchStart(e: React.TouchEvent) {
+    e.stopPropagation()
+    const touch = e.touches[0]
+    if (!touch) return
+    lastPosRef.current = { x: touch.clientX, y: touch.clientY }
+    setDragging(true)
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    e.stopPropagation()
+    const touch = e.touches[0]
+    if (!touch) return
+    const dx = touch.clientX - lastPosRef.current.x
+    const dy = touch.clientY - lastPosRef.current.y
+    lastPosRef.current = { x: touch.clientX, y: touch.clientY }
+    applyDelta(dx, dy)
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    e.stopPropagation()
+    setDragging(false)
+    onConfirmRef.current(focalRef.current.x, focalRef.current.y)
   }
 
   return (
-    <>
-      {/* Clickable overlay */}
-      <div
-        className="absolute inset-0 z-30 cursor-crosshair bg-black/30"
-        onClick={handleClick}
-      >
-        {/* Focal point dot */}
-        <div
-          className="absolute size-4 rounded-full border-2 border-white shadow-md bg-white/40 pointer-events-none"
-          style={{
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-      </div>
+    <div
+      ref={containerRef}
+      className={`absolute inset-0 z-30 select-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Live preview — the image moves in real time as you drag */}
+      <img
+        ref={imgRef}
+        src={imageSrc}
+        alt=""
+        className="w-full h-full object-cover pointer-events-none"
+        style={{ objectPosition: `${focalX}% ${focalY}%` }}
+        draggable={false}
+      />
 
-      {/* Confirm / Cancel bar */}
-      <div className="absolute bottom-0 left-0 right-0 flex gap-2 p-1.5 bg-black/50 z-40">
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation()
-            onConfirm(pos.x, pos.y)
-          }}
-          className="flex-1 text-xs font-semibold py-1 px-2 rounded bg-amber-500 text-black hover:bg-amber-400 transition-colors"
-        >
-          Set
-        </button>
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation()
-            onCancel()
-          }}
-          className="flex-1 text-xs py-1 px-2 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </>
+      {/* Cancel button — circular, lower-right */}
+      <button
+        type="button"
+        title="Cancel repositioning"
+        onClick={e => { e.stopPropagation(); onCancelRef.current() }}
+        onMouseDown={e => e.stopPropagation()} // prevent triggering drag
+        className="absolute bottom-1.5 right-1.5 z-10 size-6 rounded-full bg-black/60 text-white flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
   )
 }

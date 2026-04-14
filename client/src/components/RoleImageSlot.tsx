@@ -316,6 +316,7 @@ export function RoleImageSlot({
             />
             {focalEditorOpen && (
               <FocalPointEditor
+                imageSrc={value}
                 initialX={focalX ?? 50}
                 initialY={focalY ?? 50}
                 onConfirm={(x, y) => {
@@ -333,8 +334,8 @@ export function RoleImageSlot({
           </div>
         )}
 
-        {/* Speed dial menu — EDITOR+ only */}
-        {isEditor && (
+        {/* Speed dial menu — EDITOR+ only, hidden while focal editor is active */}
+        {isEditor && !focalEditorOpen && (
           <ImageActionMenu
             triggerHoverClass="group-hover/slot:opacity-100"
             actions={[
