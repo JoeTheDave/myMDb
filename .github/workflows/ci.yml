@@ -1,11 +1,16 @@
-name: CI
+name: Post-deploy tests
+
+# Rebuilt by spec 1786707286785 (central-command's universal-worker overhaul): the fast
+# lane commits straight to `develop` and the deploy fires from that push (deploy-staging.yml).
+# The suite here is REPORT-ONLY — a red run is a signal to read in the thread, never a
+# blocked deploy. Feature branches trigger nothing; they are no longer part of the flow.
 
 on:
-  pull_request:
-    branches: [master, develop]
+  push:
+    branches: [develop]
 
 jobs:
-  test:
+  post-deploy-tests:
     runs-on: ubuntu-latest
     services:
       postgres:
