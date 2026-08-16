@@ -77,3 +77,15 @@ jobs:
       - name: Lint client
         run: npm run lint
         working-directory: client
+
+  notify-failure:
+    needs: [push, post-deploy-tests]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Central Command
+        run: |
+          curl -sf -X POST -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.CC_WEBHOOK_SECRET }}" \
+            -d "{\"event\":\"ci-failed\",\"branchName\":\"${{ github.ref_name }}\",\"runId\":\"${{ github.run_id }}\",\"repo\":\"${{ github.repository }}\"}" \
+            https://central-command.sage-development.net/api/webhook/github || true
