@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { Check, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { exploreApi, ApiError, type ExploreCandidate } from '@/lib/api'
+import { exploreApi, ApiError, type ExploreCandidate, type ExploreMediaType } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 48
 type ExplorePage = Awaited<ReturnType<typeof exploreApi.list>>
+
+const TYPE_OPTIONS: Array<{ param: string | null; label: string; value: ExploreMediaType | undefined }> = [
+  { param: null, label: 'All', value: undefined },
+  { param: 'movies', label: 'Movies', value: 'MOVIE' },
+  { param: 'shows', label: 'Shows', value: 'SHOW' },
+]
 
 function candidateKey(c: Pick<ExploreCandidate, 'tmdbId' | 'mediaType'>) {
   return `${c.mediaType}:${c.tmdbId}`
@@ -97,16 +104,29 @@ export function ExplorePage() {
   const navigate = useNavigate()
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set())
+  const [searchParams, setSearchParams] = useSearchParams()
+  const typeParam = searchParams.get('type')
+  const selectedType = TYPE_OPTIONS.find(o => o.param === typeParam) ?? TYPE_OPTIONS[0]!
+  const actorId = searchParams.get('actor') ?? undefined
 
+  function selectType(param: string | null) {
+    const next = new URLSearchParams(searchParams)
+    if (param) next.set('type', param)
+    else next.delete('type')
+    setSearchParams(next, { replace: true })
+  }
+
+  const filters = { type: selectedType.value, actorId }
   const { data, isLoading, isError, isFetchingNextPage, fetchNextPage, hasNextPage } = useInfiniteQuery({
-    queryKey: ['explore'],
-    queryFn: ({ pageParam = 1 }) => exploreApi.list(pageParam as number, PAGE_SIZE),
+    queryKey: ['explore', filters],
+    queryFn: ({ pageParam = 1 }) => exploreApi.list(pageParam as number, PAGE_SIZE, filters),
     getNextPageParam: (lastPage) => (lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined),
     initialPageParam: 1,
   })
 
   const items = data?.pages.flatMap(p => p.items) ?? []
   const total = data?.pages[0]?.total ?? 0
+  const filterActor = data?.pages[0]?.actor ?? null
 
   useEffect(() => {
     const el = sentinelRef.current
@@ -131,7 +151,7 @@ export function ExplorePage() {
   }
 
   function removeFromList(key: string) {
-    queryClient.setQueryData<InfiniteData<ExplorePage>>(['explore'], old =>
+    queryClient.setQueriesData<InfiniteData<ExplorePage>>({ queryKey: ['explore'] }, old =>
       old
         ? {
             ...old,
@@ -176,11 +196,47 @@ export function ExplorePage() {
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Explore</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold">Explore</h1>
+          <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Filter by type">
+            {TYPE_OPTIONS.map(o => (
+              <button
+                key={o.label}
+                type="button"
+                aria-pressed={o === selectedType}
+                onClick={() => selectType(o.param)}
+                className={cn(
+                  'h-7 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  o === selectedType ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {actorId && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 h-7 text-xs">
+              With{' '}
+              {filterActor ? (
+                <Link to={`/actors/${filterActor.id}`} className="font-medium hover:text-gold">{filterActor.name}</Link>
+              ) : (
+                <span className="font-medium">…</span>
+              )}
+              <Link
+                to={typeParam ? `/explore?type=${typeParam}` : '/explore'}
+                aria-label="Show all actors"
+                title="Show all actors"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </Link>
+            </span>
+          )}
+        </div>
         {!isLoading && !isError && (
           <p className="text-sm text-muted-foreground">
-            {total} title{total === 1 ? '' : 's'} featuring your actors
+            {total} title{total === 1 ? '' : 's'} featuring {filterActor ? filterActor.name : 'your actors'}
           </p>
         )}
       </div>
@@ -198,7 +254,11 @@ export function ExplorePage() {
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
           <p className="text-lg font-medium">Nothing new to explore</p>
-          <p className="text-sm">Add more movies to discover more of your actors' work</p>
+          <p className="text-sm">
+            {actorId
+              ? `Nothing found for ${filterActor?.name ?? 'this actor'}${selectedType.value ? ` in ${selectedType.label.toLowerCase()}` : ''}`
+              : 'Add more movies to discover more of your actors\' work'}
+          </p>
         </div>
       ) : (
         <>

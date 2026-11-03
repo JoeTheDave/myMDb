@@ -141,12 +141,12 @@ function posterUrl(path: string | null | undefined, size = 'w342'): string | nul
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null
 }
 
-async function buildCandidates(): Promise<Candidate[]> {
+async function buildCandidates(filter: { actorId?: string; mediaType?: MediaType } = {}): Promise<Candidate[]> {
   await backfillPersonIds()
 
   const [actors, existingMedia, dismissals] = await Promise.all([
     prisma.actor.findMany({
-      where: { tmdbPersonId: { not: null } },
+      where: { tmdbPersonId: { not: null }, ...(filter.actorId ? { id: filter.actorId } : {}) },
       select: { id: true, name: true, imageUrl: true, tmdbPersonId: true },
     }),
     prisma.media.findMany({ select: { title: true, releaseYear: true, mediaType: true, tmdbId: true } }),
@@ -169,6 +169,7 @@ async function buildCandidates(): Promise<Candidate[]> {
   actors.forEach((actor, i) => {
     for (const credit of filmographies[i] ?? []) {
       const mediaType: MediaType = credit.media_type === 'tv' ? 'SHOW' : 'MOVIE'
+      if (filter.mediaType && mediaType !== filter.mediaType) continue
       const title = credit.title ?? credit.name
       const date = credit.release_date ?? credit.first_air_date
       if (!title || !date || date > today) continue
@@ -204,14 +205,37 @@ async function buildCandidates(): Promise<Candidate[]> {
   )
 }
 
-// GET /api/explore?page=&limit=
+const listQuerySchema = z.object({
+  type: z.enum(['MOVIE', 'SHOW']).optional(),
+  actorId: z.string().uuid().optional(),
+})
+
+// GET /api/explore?page=&limit=&type=MOVIE|SHOW&actorId=
 router.get('/', authenticate, authorize('EDITOR'), async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '24'), 10) || 24))
+  const parsed = listQuerySchema.safeParse({ type: req.query['type'] || undefined, actorId: req.query['actorId'] || undefined })
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() })
+    return
+  }
+  const { type, actorId } = parsed.data
   try {
-    const all = await buildCandidates()
+    let actor: { id: string; name: string } | null = null
+    if (actorId) {
+      actor = await prisma.actor.findUnique({ where: { id: actorId }, select: { id: true, name: true } })
+      if (!actor) {
+        res.status(404).json({ error: 'Actor not found' })
+        return
+      }
+    }
+    const all = await buildCandidates({
+      ...(actorId ? { actorId } : {}),
+      ...(type ? { mediaType: type } : {}),
+    })
     const start = (page - 1) * limit
     res.json({
+      actor,
       items: all.slice(start, start + limit),
       total: all.length,
       page,

@@ -227,9 +227,11 @@ export const imageApi = {
     }),
 }
 
+export type ExploreMediaType = 'MOVIE' | 'SHOW'
+
 export interface ExploreCandidate {
   tmdbId: number
-  mediaType: 'MOVIE' | 'SHOW'
+  mediaType: ExploreMediaType
   title: string
   releaseYear: number | null
   posterUrl: string | null
@@ -238,10 +240,14 @@ export interface ExploreCandidate {
 }
 
 export const exploreApi = {
-  list: (page = 1, limit = 24) =>
-    apiFetch<{ items: ExploreCandidate[]; total: number; page: number; totalPages: number }>(
-      '/api/explore?' + toQueryString({ page, limit }),
-    ),
+  list: (page = 1, limit = 24, filters: { type?: ExploreMediaType | undefined; actorId?: string | undefined } = {}) =>
+    apiFetch<{
+      actor: { id: string; name: string } | null
+      items: ExploreCandidate[]
+      total: number
+      page: number
+      totalPages: number
+    }>('/api/explore?' + toQueryString({ page, limit, type: filters.type, actorId: filters.actorId })),
   add: (c: Pick<ExploreCandidate, 'tmdbId' | 'mediaType'>) =>
     apiFetch<{ id: string; title: string }>('/api/explore/add', {
       method: 'POST',

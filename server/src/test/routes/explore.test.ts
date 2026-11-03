@@ -111,6 +111,52 @@ describe('GET /api/explore', () => {
   })
 })
 
+describe('GET /api/explore filters', () => {
+  async function seed() {
+    const cookie = await editorAuth()
+    const a1 = await prisma.actor.create({ data: { name: 'Alice', tmdbPersonId: 11 } })
+    const a2 = await prisma.actor.create({ data: { name: 'Bob', tmdbPersonId: 22 } })
+    mockAxiosGet.mockImplementation(async (url: string) => {
+      if (url.includes('/person/11/')) {
+        return { data: { cast: [
+          credit({ id: 100, title: 'Alice Film' }),
+          credit({ id: 101, media_type: 'tv', title: undefined, name: 'Alice Show', release_date: undefined, first_air_date: '2012-01-01' }),
+        ] } }
+      }
+      if (url.includes('/person/22/')) return { data: { cast: [credit({ id: 200, title: 'Bob Film' })] } }
+      throw new Error(`unexpected ${url}`)
+    })
+    return { cookie, a1, a2 }
+  }
+  const titles = (body: { items: Array<{ title: string }> }) => body.items.map(i => i.title).sort()
+
+  it('filters by media type', async () => {
+    const { cookie } = await seed()
+    const movies = await request(app).get('/api/explore?type=MOVIE').set('Cookie', cookie)
+    expect(titles(movies.body)).toEqual(['Alice Film', 'Bob Film'])
+    const shows = await request(app).get('/api/explore?type=SHOW').set('Cookie', cookie)
+    expect(titles(shows.body)).toEqual(['Alice Show'])
+  })
+
+  it('filters by actor and returns the actor', async () => {
+    const { cookie, a1 } = await seed()
+    const res = await request(app).get(`/api/explore?actorId=${a1.id}`).set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.actor).toEqual({ id: a1.id, name: 'Alice' })
+    expect(titles(res.body)).toEqual(['Alice Film', 'Alice Show'])
+    const combined = await request(app).get(`/api/explore?actorId=${a1.id}&type=SHOW`).set('Cookie', cookie)
+    expect(titles(combined.body)).toEqual(['Alice Show'])
+  })
+
+  it('404s an unknown actor and 400s a bad type', async () => {
+    const { cookie } = await seed()
+    const missing = await request(app).get('/api/explore?actorId=00000000-0000-4000-8000-000000000000').set('Cookie', cookie)
+    expect(missing.status).toBe(404)
+    const bad = await request(app).get('/api/explore?type=BOOK').set('Cookie', cookie)
+    expect(bad.status).toBe(400)
+  })
+})
+
 describe('POST /api/explore/dismiss', () => {
   it('records the dismissal idempotently', async () => {
     const cookie = await editorAuth()

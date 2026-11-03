@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2, User, Film } from 'lucide-react'
+import { Edit2, Trash2, User, Film, Compass } from 'lucide-react'
 import { toast } from 'sonner'
 import { actorApi, castApi } from '@/lib/api'
 import { hasMinRole } from '@/lib/types'
@@ -279,6 +279,13 @@ export function ActorDetailPage() {
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-3xl font-bold">{actor.name}</h1>
             <div className="flex gap-2 shrink-0">
+              {isEditor && (
+                <Link to={`/explore?actor=${actor.id}`}>
+                  <Button variant="outline" size="sm" title={`Titles with ${actor.name} not in the database yet`}>
+                    <Compass className="size-4 mr-1.5" /> Explore
+                  </Button>
+                </Link>
+              )}
               {isEditor && (
                 <Link to={`/actors/${actor.id}/edit`}>
                   <Button variant="outline" size="sm">
