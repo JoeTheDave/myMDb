@@ -8,6 +8,7 @@ import { hasMinRole } from '@/lib/types'
 import { ActorCard } from '@/components/ActorCard'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
+import { useListScrollRestore, useRestoreListScroll } from '@/hooks/useListScrollRestore'
 
 const NAVBAR_HEIGHT = 56 // px — matches h-14 in Navbar
 
@@ -28,8 +29,9 @@ export function ActorsPage() {
   const queryClient = useQueryClient()
   const isEditor = user ? hasMinRole(user.role, 'EDITOR') : false
 
-  const [searchInput, setSearchInput] = useState('')
-  const [committedSearch, setCommittedSearch] = useState('')
+  const listScroll = useListScrollRestore('actors')
+  const [searchInput, setSearchInput] = useState(listScroll.initialQuery)
+  const [committedSearch, setCommittedSearch] = useState(listScroll.initialQuery)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -95,6 +97,19 @@ export function ActorsPage() {
   })
 
   const items = data?.pages.flatMap(p => p.items) ?? []
+
+  const { rememberQuery } = listScroll
+  useEffect(() => {
+    rememberQuery(committedSearch)
+  }, [committedSearch, rememberQuery])
+
+  useRestoreListScroll(listScroll, {
+    ready: !isLoading,
+    itemCount: items.length,
+    hasNextPage: !!hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  })
 
   useEffect(() => {
     const el = sentinelRef.current

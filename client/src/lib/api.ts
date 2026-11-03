@@ -226,3 +226,32 @@ export const imageApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
 }
+
+export interface ExploreCandidate {
+  tmdbId: number
+  mediaType: 'MOVIE' | 'SHOW'
+  title: string
+  releaseYear: number | null
+  posterUrl: string | null
+  popularity: number
+  actors: Array<{ id: string; name: string; imageUrl: string | null; character: string | null }>
+}
+
+export const exploreApi = {
+  list: (page = 1, limit = 24) =>
+    apiFetch<{ items: ExploreCandidate[]; total: number; page: number; totalPages: number }>(
+      '/api/explore?' + toQueryString({ page, limit }),
+    ),
+  add: (c: Pick<ExploreCandidate, 'tmdbId' | 'mediaType'>) =>
+    apiFetch<{ id: string; title: string }>('/api/explore/add', {
+      method: 'POST',
+      body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  dismiss: (c: Pick<ExploreCandidate, 'tmdbId' | 'mediaType' | 'title'>) =>
+    apiFetch<void>('/api/explore/dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, title: c.title }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+}

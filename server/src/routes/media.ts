@@ -7,6 +7,7 @@ import { authorize } from '../middleware/authorize'
 import { deleteS3Object, uploadBufferToS3 } from '../lib/s3'
 import { logger } from '../lib/logger'
 import { fetchRTRatings, RTNotFoundError } from '../lib/rtScraper'
+import { getTmdbId, type MediaType } from '../lib/tmdb'
 
 const router = Router()
 
@@ -51,43 +52,6 @@ const listQuerySchema = z.object({
 
 function isS3Url(url: string | null | undefined): boolean {
   return !!url && url.includes('.s3.') && url.includes('amazonaws.com')
-}
-
-type MediaType = 'MOVIE' | 'SHOW'
-
-async function getTmdbId(media: {
-  title: string
-  releaseYear: number | null
-  mediaType: MediaType
-  imdbId?: string | null
-}): Promise<number> {
-  const tmdbToken = process.env['TMDB_READ_ACCESS_TOKEN']
-  const headers = { Authorization: `Bearer ${tmdbToken}` }
-
-  if (media.imdbId) {
-    const findResponse = await axios.get(`https://api.themoviedb.org/3/find/${media.imdbId}`, {
-      params: { external_source: 'imdb_id' },
-      headers,
-      timeout: 15000,
-    })
-    type FindData = { movie_results?: Array<{ id: number }>; tv_results?: Array<{ id: number }> }
-    const findData = findResponse.data as FindData
-    const result = media.mediaType === 'SHOW' ? findData.tv_results?.[0] : findData.movie_results?.[0]
-    if (result) return result.id
-  }
-
-  // Fall back to title + year search
-  const endpoint = media.mediaType === 'SHOW'
-    ? 'https://api.themoviedb.org/3/search/tv'
-    : 'https://api.themoviedb.org/3/search/movie'
-  const params: Record<string, string | number> = { query: media.title, page: 1 }
-  if (media.releaseYear) params['year'] = media.releaseYear
-  const searchResponse = await axios.get(endpoint, { params, headers, timeout: 15000 })
-  type SearchData = { results?: Array<{ id: number }> }
-  const searchData = searchResponse.data as SearchData
-  const first = searchData.results?.[0]
-  if (!first) throw new Error(`No TMDb result for title: ${media.title}`)
-  return first.id
 }
 
 async function enrichNewActor(
@@ -774,14 +738,14 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
 
   // Collect new actors to enrich
   const newActorEntries: Array<{ index: number; tmdbPersonId: number; actorName: string; character: string; profilePath: string | null }> = []
-  const matchedEntries: Array<{ index: number; actorName: string; character: string; existingActorId: string }> = []
+  const matchedEntries: Array<{ index: number; tmdbPersonId: number; actorName: string; character: string; existingActorId: string }> = []
 
   for (let i = 0; i < castEntries.length; i++) {
     const entry = castEntries[i]
     if (!entry) continue
     const existingActor = actorByName.get(entry.actorName.toLowerCase())
     if (existingActor) {
-      matchedEntries.push({ index: i, actorName: entry.actorName, character: entry.character, existingActorId: existingActor.id })
+      matchedEntries.push({ index: i, tmdbPersonId: entry.tmdbPersonId, actorName: entry.actorName, character: entry.character, existingActorId: existingActor.id })
     } else {
       newActorEntries.push({ index: i, tmdbPersonId: entry.tmdbPersonId, actorName: entry.actorName, character: entry.character, profilePath: entry.profilePath })
     }
@@ -796,6 +760,11 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
   for (const entry of matchedEntries) {
     try {
       matched++
+      // Record the TMDb person id for Explore (only if not already known)
+      await prisma.actor.updateMany({
+        where: { id: entry.existingActorId, tmdbPersonId: null },
+        data: { tmdbPersonId: entry.tmdbPersonId },
+      })
       if (castRoleActorIds.has(entry.existingActorId)) {
         skipped++
         continue
@@ -822,6 +791,7 @@ router.post('/:id/cast/import', authenticate, authorize('EDITOR'), async (req: R
       const newActor = await prisma.actor.create({
         data: {
           name: entry.actorName,
+          tmdbPersonId: entry.tmdbPersonId,
           birthday: enrichData.birthday,
           deathDay: enrichData.deathDay,
           imageUrl: enrichData.imageUrl,
