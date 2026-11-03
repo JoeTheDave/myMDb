@@ -15,7 +15,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   notify-failure:
-    needs: [push, deploy]
+    needs: [deploy]
     if: failure()
     runs-on: ubuntu-latest
     steps:

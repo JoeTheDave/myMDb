@@ -79,7 +79,7 @@ jobs:
         working-directory: client
 
   notify-failure:
-    needs: [push, post-deploy-tests]
+    needs: [post-deploy-tests]
     if: failure()
     runs-on: ubuntu-latest
     steps:
