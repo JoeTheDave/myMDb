@@ -32,10 +32,9 @@ Backend: http://localhost:3001
 
 ## Deploying
 
-Staging and production deploy automatically via GitHub Actions when changes are merged to `develop` and `master` respectively.
+Production deploys automatically via GitHub Actions on every push to `master`. There is no staging environment.
 
 To deploy manually:
 ```bash
-fly deploy --remote-only                                    # production
-fly deploy --config fly.staging.toml --remote-only          # staging
+fly deploy --remote-only
 ```

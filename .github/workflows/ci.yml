@@ -1,13 +1,13 @@
 name: Post-deploy tests
 
-# Rebuilt by spec 1786707286785 (central-command's universal-worker overhaul): the fast
-# lane commits straight to `develop` and the deploy fires from that push (deploy-staging.yml).
-# The suite here is REPORT-ONLY — a red run is a signal to read in the thread, never a
+# Rebuilt by spec 1786707286785 (central-command's universal-worker overhaul). Single-branch
+# since 2026-11-03: the fast lane commits straight to `master` and the prod deploy fires from
+# that push (deploy-production.yml). The suite here is REPORT-ONLY — a red run is a signal to read in the thread, never a
 # blocked deploy. Feature branches trigger nothing; they are no longer part of the flow.
 
 on:
   push:
-    branches: [develop]
+    branches: [master]
 
 jobs:
   post-deploy-tests:

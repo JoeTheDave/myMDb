@@ -6,13 +6,11 @@ A personal movie and TV database with full cast/crew data, auto-fetched ratings,
 ## Workflow
 ```yaml
 deployments:
-  staging:
-    branch: develop
   prod:
     branch: master
 ```
 
-Feature branches merge to `develop` (→ staging auto-deploy), then `develop` merges to `master` (→ prod auto-deploy). Version in root `package.json` must be bumped on every feature branch before merging to `develop`.
+Single branch, no staging (Joe, 2026-11-03: staging is only for client sites). Agent work commits straight to `master`; the push auto-deploys to prod (`deploy-production.yml`) and runs the report-only test suite (`ci.yml`).
 
 ## Intentional Deviations from STANDARDS.md
 
@@ -32,7 +30,7 @@ Feature branches merge to `develop` (→ staging auto-deploy), then `develop` me
 | Auth | Google OAuth2 via Passport.js + JWT (httpOnly cookie, SameSite=Lax) |
 | Database | PostgreSQL — `sage-shared-dev-postgres` Docker locally, `sage-shared-postgres` Fly cluster in prod |
 | Image Storage | AWS S3 (`mymdb-dev-assets` / `mymdb-prod-assets`) — always proxied through backend, never direct browser upload |
-| Deployment | Fly.io — `mymdb` (prod), `mymdb-staging` (staging) |
+| Deployment | Fly.io — `mymdb` (prod only) |
 | CI/CD | GitHub Actions |
 | Testing | Vitest + Supertest (integration, real DB) |
 | Node | 24 (.nvmrc) |
@@ -55,9 +53,8 @@ myMDb/
 │       ├── test/              # Vitest + Supertest integration tests
 │       └── types/             # express.d.ts
 ├── scripts/                   # ensure-postgres.sh, ensure-database.sh
-├── .github/workflows/         # ci.yml, deploy-staging.yml, deploy-production.yml
+├── .github/workflows/         # ci.yml (report-only tests), deploy-production.yml
 ├── fly.toml                   # production Fly.io config
-├── fly.staging.toml           # staging Fly.io config
 └── Dockerfile
 ```
 
@@ -240,8 +237,7 @@ model CastRole {
 - **Image uploads**: Always proxied through `/api/upload` or `/api/images/download`. Never direct browser-to-S3.
 - **S3 cleanup**: Deleting or replacing any imageUrl/roleImageUrl must also delete the old S3 object. Failures are logged (pino + logId) but must not fail the API request.
 - **LogId format**: Every pino log statement includes `logId: 'adjective-verb-noun'`. Grep before adding to ensure uniqueness.
-- **Shared Postgres cluster**: Both staging and prod live on `sage-shared-postgres`. If it enters error state, run `fly machine restart [id] -a sage-shared-postgres`.
-- **Version guard**: Feature branches must bump `package.json` version before merging to `develop`. Never merge if feature and develop share the same version.
+- **Shared Postgres cluster**: Prod lives on `sage-shared-postgres`. If it enters error state, run `fly machine restart [id] -a sage-shared-postgres`.
 
 ## Tagged Versions
 - `v1.13.0` — 2026-06 — Current. Focal point editor, cast sort order, TMDB cast import, Amazon/trailer auto-lookup
