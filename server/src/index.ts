@@ -15,6 +15,7 @@ import mediaRolesRouter from './routes/roles'
 import { rolesRouter } from './routes/roles'
 import uploadRouter from './routes/upload'
 import imagesRouter from './routes/images'
+import exploreRouter from './routes/explore'
 
 const app = express()
 
@@ -24,7 +25,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com', 'imgs.search.brave.com'],
+        'img-src': ["'self'", 'blob:', 'data:', '*.amazonaws.com', 'imgs.search.brave.com', 'image.tmdb.org'],
         'frame-src': ["'self'", 'https://www.youtube-nocookie.com'],
       },
     },
@@ -54,6 +55,7 @@ app.use('/api/users', usersRouter)
 app.use('/api/media', mediaRouter)
 app.use('/api/media/:id/roles', mediaRolesRouter)
 app.use('/api/actors', actorsRouter)
+app.use('/api/explore', exploreRouter)
 app.use('/api/roles', rolesRouter)
 app.use('/api/upload', uploadRouter)
 app.use('/api/images', imagesRouter)

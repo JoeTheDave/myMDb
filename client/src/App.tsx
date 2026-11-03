@@ -1,10 +1,11 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom'
+import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { Sun, Moon, Shield, LogOut } from 'lucide-react'
 
 import { AuthContext, useAuthState } from '@/hooks/useAuth'
+import { hasMinRole } from '@/lib/types'
 import { useTheme } from '@/hooks/useTheme'
 
 import { Logo } from '@/components/Logo'
@@ -27,6 +28,7 @@ import { ActorsPage } from '@/pages/ActorsPage'
 import { ActorDetailPage } from '@/pages/ActorDetailPage'
 import { ActorFormPage } from '@/pages/ActorFormPage'
 import { AdminPage } from '@/pages/AdminPage'
+import { ExplorePage } from '@/pages/ExplorePage'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 
@@ -93,6 +95,9 @@ function Navbar() {
           <nav className="flex items-center gap-5">
             <NavLink to="/movies" className={navLinkClass}>Movies</NavLink>
             <NavLink to="/actors" className={navLinkClass}>Actors</NavLink>
+            {hasMinRole(user.role, 'EDITOR') && (
+              <NavLink to="/explore" className={navLinkClass}>Explore</NavLink>
+            )}
             {user.role === 'ADMIN' && (
               <NavLink to="/admin" className={navLinkClass}>
                 <Shield className="size-4 inline mr-1" />
@@ -158,6 +163,14 @@ function Navbar() {
 // ---- Layout shell ----
 
 function AppLayout({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const navType = useNavigationType()
+
+  // New pages open at the top; Back/Forward is left to the page (lists restore their position)
+  useEffect(() => {
+    if (navType !== 'POP') window.scrollTo(0, 0)
+  }, [location.key, navType])
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
@@ -235,6 +248,14 @@ function AppRoutes() {
           element={
             <AppLayout>
               <ErrorBoundary><MediaFormPage /></ErrorBoundary>
+            </AppLayout>
+          }
+        />
+        <Route
+          path="/explore"
+          element={
+            <AppLayout>
+              <ErrorBoundary><ExplorePage /></ErrorBoundary>
             </AppLayout>
           }
         />
